@@ -7,10 +7,12 @@ authors = [
 ]
 license = { file = "MIT" }
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "matplotlib",
     "tqdm",
     "mini-auspex",
+    "scipy",
+    "numba",
 ]
