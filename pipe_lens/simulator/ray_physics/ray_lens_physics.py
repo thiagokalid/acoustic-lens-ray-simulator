@@ -2,9 +2,6 @@
 from abc import ABC
 from copy import deepcopy
 
-# scientific-computing modules
-import numpy as np
-
 # modules implemented in this repo
 from pipe_lens.acoustic_lens import AcousticLens
 from pipe_lens.pipeline import Pipeline

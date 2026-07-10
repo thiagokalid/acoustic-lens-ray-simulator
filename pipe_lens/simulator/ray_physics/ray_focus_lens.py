@@ -63,50 +63,37 @@ class RayFocusThroughLens(RayLensPhysics):
 
     def build_transmission_model(self, omega, rays: Ray, flag: bool):
         if flag:
-            # Reflection Aluminium to water:
-            R11 = compute_tension_reflection_coefficient(
-                inc_ang=rays.ang_i[0], trans_ang=rays.ang_t[0],
-                medium1=self.acoustic_lens.wedge_medium, medium2=self.acoustic_lens.coupling_medium,
-                inc_mode="L", reflect_mode="L"
-            )
-
             # Transmission Aluminium to water:
             T12 = compute_tension_transmission_coefficient(
-                inc_ang=rays.ang_i[1], trans_ang=rays.ang_t[1],
+                inc_ang=rays.ang_i[0], trans_ang=rays.ang_t[0],
                 medium1=self.acoustic_lens.wedge_medium, medium2=self.acoustic_lens.coupling_medium,
                 inc_mode="L", trans_mode="L"
             )
 
             # Transmission Water to steel:
             T23 = compute_tension_transmission_coefficient(
-                inc_ang=rays.ang_i[2], trans_ang=rays.ang_t[2],
+                inc_ang=rays.ang_i[1], trans_ang=rays.ang_t[1],
                 medium1=self.acoustic_lens.coupling_medium, medium2=self.pipeline.material,
                 inc_mode="L", trans_mode="L"
             )
 
-            T1 = R11 * T12 * T23
+            T1 = T12 * T23
 
             # Steel to water:
             T32 = compute_tension_transmission_coefficient(
-                inc_ang=rays.ang_t[2], trans_ang=rays.ang_i[2],
+                inc_ang=rays.ang_t[1], trans_ang=rays.ang_i[1],
                 medium1=self.pipeline.material, medium2=self.acoustic_lens.coupling_medium,
                 inc_mode="L", trans_mode="L"
             )
 
             # Water to aluminium:
             T21 = compute_tension_transmission_coefficient(
-                inc_ang=rays.ang_t[1], trans_ang=rays.ang_i[1],
+                inc_ang=rays.ang_t[0], trans_ang=rays.ang_i[0],
                 medium1=self.acoustic_lens.coupling_medium, medium2=self.acoustic_lens.wedge_medium,
                 inc_mode="L", trans_mode="L"
             )
 
-            R11 = compute_tension_reflection_coefficient(
-                inc_ang=rays.ang_t[0], trans_ang=rays.ang_i[0],
-                medium1=self.acoustic_lens.wedge_medium, medium2=self.acoustic_lens.coupling_medium,
-                inc_mode="L", reflect_mode="L"
-            )
-
-            T2 = T32 * T21 * R11
+            T2 = T32 * T21
         else:
             T1 = T2 = 1.
 
@@ -209,70 +196,6 @@ class RayFocusThroughLens(RayLensPhysics):
             xray = [xc_mtx, xlens, xcirc, xin],
             zray = [zc_mtx, ylens, ycirc, yin],
             dist2focus = dist,
-            ang_i = [inc12, inc23, ang_f],
-            ang_t = [ref12, ref23, ang_f],
-            medium = (self.medium1, self.medium2, self.medium3),
-            modes= self.modes
-        )
-
-    def _dist_kernel2(self, xc: float, zc: float, steering_angle: float):
-        steering_angle_2 = np.pi/2 - steering_angle
-
-        line_cart = lambda x : np.tan(steering_angle_2) * (x - xc) + zc
-        #
-        import matplotlib.pyplot as plt
-        # plt.gca().plot(self.acoustic_lens.xlens, line_cart(self.acoustic_lens.xlens), color='lime', lw=1.5)
-
-        cost_fun = lambda xx: np.power(line_cart(xx) - self.acoustic_lens.y_from_x(xx, safe=False), 2)
-        sol = minimize(cost_fun, np.arctan2(zc, xc), method='L-BFGS-B', bounds=[(np.min(self.acoustic_lens.xlens), np.max(self.acoustic_lens.xlens))])
-        print(sol.success)
-        xcurve = sol.x
-        acurve = self.acoustic_lens.alpha_from_x(xcurve)[0]
-
-        # Ponto x,y da lente avaliado em relação a alfa.
-        xlens, ylens = self.acoustic_lens.xy_from_alpha(acurve, safe=False)
-
-        plt.gca().plot(xlens, ylens, 'ob')
-
-        # Ângulo de incidência na lente com relação ao eixo x
-        gamma1 = np.arctan2((ylens - zc), (xlens - xc))
-        gamma1 = gamma1 + (gamma1 < 0) * np.pi
-
-        # Ângulo refratado em relação ao eixo x
-        gamma2, inc12, ref12 = snell(self.c1, self.c2, gamma1, self.acoustic_lens.dydx_from_alpha(acurve, safe=False))
-
-        # Coeficientes da reta r1(x) = a_line + x + b_line
-        # que coincide com o raio refratado na água:
-        a_line = np.tan(uhp(gamma2))
-        b_line = ylens - a_line * xlens
-
-        # Calculando a intersecção entre a reta r1(x) e a circunferência dada pelo raio do tubo.
-        a = a_line**2 + 1
-        b = 2 * a_line * b_line - 2 * (self.pipeline.xcenter + a_line * self.pipeline.zcenter)
-        c = b_line ** 2 + self.pipeline.xcenter ** 2 + self.pipeline.zcenter ** 2 - 2 * self.pipeline.zcenter * b_line - self.pipeline.outer_radius ** 2
-
-        # Esocolhe o primeir ângulo de incidência:
-        xcirc1, xcirc2 = roots_bhaskara(a, b, c)
-        ycirc1, ycirc2 = a_line * xcirc1 + b_line, a_line * xcirc2 + b_line
-        upper = ycirc1 > ycirc2
-        xcirc = xcirc1 * upper + xcirc2 * (1 - upper)
-        ycirc = ycirc1 * upper + ycirc2 * (1 - upper)
-
-        # Ângulo de refração, em relação ao eixo x, do raio refratado dentro do tubo:
-        gamma3, inc23, ref23 = snell(self.c2, self.c3, gamma2, self.pipeline.dydx(xcirc))
-        a3 = np.tan(gamma3)
-        b3 = ycirc - a3 * xcirc
-
-
-        xc_mtx = xc * np.ones_like(xlens)
-        zc_mtx = zc * np.ones_like(xlens)
-
-        ang_f = np.pi/2 * np.ones_like(xlens)
-
-        return Ray(
-            xray = [xc_mtx, xlens, xcirc, a3 * 0 + b3],
-            zray = [zc_mtx, ylens, ycirc, a3 * 0 + b3],
-            dist2focus = 1,
             ang_i = [inc12, inc23, ang_f],
             ang_t = [ref12, ref23, ang_f],
             medium = (self.medium1, self.medium2, self.medium3),

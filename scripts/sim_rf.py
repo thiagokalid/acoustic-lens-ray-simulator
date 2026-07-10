@@ -49,7 +49,6 @@ center = (0., 0.)
 # Acoustic-lens related:
 wedge_material = aluminium
 coupling_medium = water
-LENS_NAME = "v2-0-0_LL-Longa"
 d = 2 * 105e-3
 # h0 = 90e-3
 h0, _, _ = convert_parameters(c=d/2, wc=4.1e-3, R=outer_radius, v1=wedge_material.cp, v2=coupling_medium.cp)

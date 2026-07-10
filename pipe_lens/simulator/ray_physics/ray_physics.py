@@ -4,7 +4,7 @@ from numpy import ndarray
 
 # built-in modules
 from abc import ABC, abstractmethod
-from typing import Tuple, Callable, List
+from typing import List
 from dataclasses import dataclass
 
 # modules implemented in this repo
