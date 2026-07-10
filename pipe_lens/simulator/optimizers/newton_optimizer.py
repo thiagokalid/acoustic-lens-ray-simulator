@@ -38,7 +38,7 @@ class NewtonOptimizer(RayOptimizer):
     verbose: bool
         Flag que define se irá ser mostrado informações como progresso, prints de debug, etc.
     """
-    def __init__(self, alpha_max: float, max_iter: int = 10, eps: float = 1e-4, alpha_min: float = 0., learning_rate: float = 1, dist_tolerance: float = 1e-8, init_guess: np.ndarray | None = None, verbose: bool = False):
+    def __init__(self, alpha_max: float, max_iter: int = 10, eps: float = 1e-4, alpha_min: float = 0., learning_rate: float = 1, dist_tolerance: float = 1e-6, init_guess: np.ndarray | None = None, verbose: bool = False):
         super().__init__(alpha_max, alpha_min, verbose)
         if init_guess is None:
             self.init_guess = init_guess
@@ -59,8 +59,6 @@ class NewtonOptimizer(RayOptimizer):
 
     def optimize(self, cost_func: CostFunction, init_guess: float | np.ndarray) -> Ray:
         alpha = init_guess
-        best_ray = None
-        best_dist = []
 
         for i in range(self.max_iter):
             # The cost_func now returns the dict AND the derivatives
@@ -71,11 +69,18 @@ class NewtonOptimizer(RayOptimizer):
             alpha -= self.learning_rate * d1 / d2
             alpha[np.isnan(alpha)] = init_guess[np.isnan(alpha)]
 
-            if best_ray is None:
+            # Check which rays have converged according to pre-defined tolerance:
+            converged_rays = ray_candidate.dist2focus < self.dist_tolerance
+
+            if i == 0:
                 best_ray = ray_candidate
             else:
-                best_ray, _ = pick_best_rays(best_ray, ray_candidate)
-            best_dist.append(best_ray.dist2focus)
+                # regular iteration
+                best_ray, _ = pick_best_rays(best_ray, ray_candidate, converged_rays)
+
+            if np.all(converged_rays):
+                # all rays have converged
+                break
 
         return best_ray
 

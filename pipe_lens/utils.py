@@ -7,7 +7,8 @@ __all__ = [
     'api_func',
     'api_polar',
     'api',
-    'fwhm'
+    'fwhm',
+    'convert_corners_time2idx',
 ]
 
 
@@ -349,20 +350,3 @@ def moving_average(vector, n=2):
     for i in range(0, n_elem - n + 1):
         output[i] = np.mean(vector[i:i + n])
     return output
-
-# def get_lens(version : str = ""):
-#     wc, c, c1, c2, offset, r_outer, wall_thickness, rho1, rho2, alpha_max = get_lens_params(version)
-#
-#     rho1 = rho1 if rho1 is not None else 2.700
-#     rho2 = rho2 if rho2 is not None else 1.000
-#
-#     aluminium = Solid(cp=c1, cs=c1/2, density=rho1)
-#     water = Fluid(cp=c2, density=rho2)
-#
-#     h0, _, _alpha_max = convert_parameters(c, wc, r_outer, c1, c2)
-#
-#     alpha_max = _alpha_max if alpha_max is None else alpha_max
-#
-#     acoustic_lens = AcousticLens(wedge_material=aluminium, coupling_medium=water, d=2*c, alpha_max=alpha_max, alpha_0=0., h0=h0)
-#
-#     return acoustic_lens

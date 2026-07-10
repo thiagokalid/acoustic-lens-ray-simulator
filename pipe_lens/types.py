@@ -206,7 +206,10 @@ class Ray:
 
         return total_time
 
-def pick_best_rays(ray1: Ray, ray2: Ray) -> tuple[Ray, NDArray[np.bool_]]:
+    def __index__(self):
+        pass
+
+def pick_best_rays(ray1: Ray, ray2: Ray, mask: np.ndarray[bool]) -> tuple[Ray, NDArray[np.bool_]]:
     """ Compara dois objetos do tipo `Ray` com base em seu tempo de vôo, e retorna o que tiver menor tempo de vôo.
 
     Parameters
@@ -215,6 +218,8 @@ def pick_best_rays(ray1: Ray, ray2: Ray) -> tuple[Ray, NDArray[np.bool_]]:
         Raio 1 a ser comparado
     ray2: `Ray`
         Raio 2 a ser comparado
+    mask: ndarray[bool]
+        An array that restricts the comparisson only to a few rays.
 
     Returns
     -------
@@ -225,6 +230,7 @@ def pick_best_rays(ray1: Ray, ray2: Ray) -> tuple[Ray, NDArray[np.bool_]]:
     """
     new_ray = deepcopy(ray1)
     best_rays = ray1.dist2focus > ray2.dist2focus
+    best_rays = best_rays * mask # merge both masks
     new_ray.xray[:, best_rays] = ray2.xray[:, best_rays]
     new_ray.zray[:, best_rays] = ray2.zray[:, best_rays]
     new_ray.ang_i[:, best_rays] = ray2.ang_i[:, best_rays]

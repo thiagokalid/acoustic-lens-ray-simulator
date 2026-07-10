@@ -6,8 +6,6 @@ from scipy.signal import hilbert
 
 __all__ = ["Simulator"]
 
-FLOAT = np.float32
-
 class Simulator:
     def __init__(self, gate_start: float, gate_end: float, fs: float, raytracer: RaytracerScenario | None):
         self.gate_start = gate_start

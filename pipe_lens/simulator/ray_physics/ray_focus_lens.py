@@ -29,15 +29,24 @@ class RayFocusThroughLens(RayLensPhysics):
 
         Ta = np.ones(shape=(n_samples, n_elem, n_elem), dtype=np.complex64)
 
+        # time-of-flight delay:
         P = self.build_propagation_model(omega, rays, self.loss_model.propagation)
+
+        # transmission diffraction correction:
         C1 = self.build_diffraction_tx_model(omega, rays, self.loss_model.transmission_diffraction)
+
+        # reception diffraction + spatial averaging correction:
         C2 = self.build_diffraction_rx_model(omega, rays, self.loss_model.reception_diffraction)
+
+        # spatial attenuation:
         M = self.build_attenuation_model(omega, rays, self.loss_model.attenuation)
 
         # Computing amplitude:
         for tx in range(n_elem):
+            # transmission coefficient:
             T1, _ = self.build_transmission_model(omega, rays[tx], self.loss_model.transmission)
             for rx in range(n_elem):
+                # transmission coefficient:
                 _, T2 = self.build_transmission_model(omega, rays[rx], self.loss_model.transmission)
 
                 Ta[:, tx, rx] *= P[:, tx, rx] * T1 * T2 * C1[:, tx] * C2[:, rx] * M[:, tx, rx]

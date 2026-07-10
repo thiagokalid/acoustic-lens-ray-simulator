@@ -24,7 +24,7 @@ from pipe_lens.utils import api_polar, convert_time2radius
 
 #%% USER INPUT:
 
-PLOT_SSCANS = False
+PLOT_SSCANS = True
 
 # Materials related:
 steel = Solid(cp=5900, cs=3200, density=7850)
@@ -151,8 +151,9 @@ for i in tqdm(range(len(theta_scatterer))):
         delta_thickness = outer_radius - r_scatterer
 
         plt.plot(np.degrees(theta_scatterer[i]), (acoustic_lens.t_outer + 2 * delta_thickness/pipeline.material.cp) * 1e6, 'o', markerfacecolor="None", color='lime', ms=15)
+        plt.xlabel("Angular position / (degrees)")
+        plt.ylabel(r"Time / $\mathrm{(\mu s)}$")
         plt.show(block=True)
-        # plt.savefig(f"direct_{i}.png", dpi=300)
 
 
 #%%
