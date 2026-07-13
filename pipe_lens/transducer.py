@@ -36,6 +36,12 @@ class Transducer:
         self.bw = bw  # Hz
         self.bwr = bwr  # dB
         self.pulse_type = pulse_type
+
+        # SciPy definition of 'a'
+        self.ref = 10 ** (self.bwr / 20)
+        self.a = -(np.pi * self.fc * self.bw) ** 2 / (4 * np.log(self.ref))
+        self.prefactor = 0.5 * np.sqrt(np.pi / self.a)
+
         self.xt = np.arange(0, self.num_elem) * pitch
         self.xt -= np.mean(self.xt)
         self.zt = np.zeros_like(self.xt)
@@ -61,9 +67,13 @@ class Transducer:
         else:
             return self.xt[i], self.zt[i]
 
-    def compute_time_domain_response(self, tspan):
+    @property
+    def coords(self):
+        return np.array([self.xt, self.zt])
+
+    def compute_time_domain_response(self, t):
         if self.pulse_type == "gaussian":
-            return gausspulse(tspan, fc=self.fc, bw=self.bw, bwr=self.bwr)
+            return np.exp(-self.a * t * t) * np.cos(2 * np.pi * self.fc * t)
         else:
             raise NotImplementedError
 
@@ -71,15 +81,9 @@ class Transducer:
         if self.pulse_type == "gaussian":
             omega_c = 2 * np.pi * self.fc
 
-            # SciPy definition of 'a'
-            ref = 10 ** (self.bwr / 20)
-            a = - (np.pi * self.fc * self.bw) ** 2 / np.log(ref)
-
-            prefactor = 0.5 * np.sqrt(np.pi / a)
-
-            spectrum = prefactor * (
-                    np.exp(-(omega - omega_c) ** 2 / (4 * a)) +
-                    np.exp(-(omega + omega_c) ** 2 / (4 * a))
+            spectrum = self.prefactor * (
+                    np.exp(-(omega - omega_c) ** 2 / (4 * self.a)) +
+                    np.exp(-(omega + omega_c) ** 2 / (4 * self.a))
             )
 
             return spectrum.astype(np.complex64)

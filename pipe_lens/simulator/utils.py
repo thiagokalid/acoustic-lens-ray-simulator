@@ -1,5 +1,9 @@
 from numpy import sqrt
+
+import os
+os.environ["NUMBA_THREADING_LAYER"] = "omp"
 from numba import njit, prange
+
 import numpy as np
 
 from numpy import ndarray
@@ -74,6 +78,63 @@ def fmc2sscan(fmc_sims: ndarray, shifts_e, shifts_r, n_elem: int):
     # return sscan, signal_recepted_by_focus
     return sscan
 
+
+@njit(parallel=True, fastmath=True)
+def fmc2sscan_numba(
+    fmc,
+    shifts_e,
+    shifts_r,
+):
+    """
+    fmc:
+        (samples, tx, rx)
+
+    shifts_e:
+        (tx, laws)
+
+    shifts_r:
+        (rx, laws)
+
+    returns:
+        (samples, laws)
+    """
+
+    n_samples = fmc.shape[0]
+    n_tx = fmc.shape[1]
+    n_rx = fmc.shape[2]
+    n_laws = shifts_e.shape[1]
+
+    sscan = np.zeros((n_samples, n_laws), dtype=fmc.dtype)
+
+    for law in prange(n_laws):
+
+        for t in range(n_samples):
+
+            acc = 0.0
+
+            for tx in range(n_tx):
+
+                te = t - shifts_e[tx, law]
+
+                if te < 0:
+                    te += n_samples
+                elif te >= n_samples:
+                    te -= n_samples
+
+                for rx in range(n_rx):
+
+                    tr = te - shifts_r[rx, law]
+
+                    if tr < 0:
+                        tr += n_samples
+                    elif tr >= n_samples:
+                        tr -= n_samples
+
+                    acc += fmc[tr, tx, rx]
+
+            sscan[t, law] = acc
+
+    return sscan
 
 def angle_between(a, b):
     dot = np.sum(a * b, axis=1)

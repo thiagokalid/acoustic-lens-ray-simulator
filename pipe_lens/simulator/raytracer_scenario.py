@@ -45,7 +45,7 @@ class RaytracerScenario:
             xf = np.array([xf])
             zf = np.array([zf])
 
-        xc, yc = self.physics.transducer.get_coords()
+        xc, yc = self.physics.transducer.coords
 
         # Example of simple delegation:
         results = self.optimizer.optimize_batch(

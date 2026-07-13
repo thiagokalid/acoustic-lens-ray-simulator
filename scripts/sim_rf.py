@@ -16,7 +16,7 @@ from pipe_lens.simulator.ray_physics.ray_focus_lens import RayFocusThroughLens
 from pipe_lens.simulator.optimizers.newton_optimizer import NewtonOptimizer
 from pipe_lens.simulator.raytracer_scenario import RaytracerScenario
 from pipe_lens.simulator.simulator import Simulator
-from pipe_lens.simulator.utils import fmc2sscan
+from pipe_lens.simulator.utils import fmc2sscan_numba
 from pipe_lens.types import Solid, Fluid
 from framework.post_proc import envelope
 from pipe_lens.utils import api_polar, convert_time2radius
@@ -120,13 +120,15 @@ fwhm_vertical = [None] * len(theta_scatterer)
 
 for i in tqdm(range(len(theta_scatterer))):
     fmc = simulation.simulate_scatterer(np.asarray([x_scatterer[i]]), np.asarray([z_scatterer[i]]))
-    delay_law_in_shifts = np.round(delay_law * simulation.fs)
+    delay_law_in_shifts = np.round(delay_law * simulation.fs).astype(np.int32)
 
-    sscan = fmc2sscan(
-        fmc_sims=fmc,
-        shifts_e=delay_law_in_shifts, shifts_r=delay_law_in_shifts,
-        n_elem=transducer.num_elem
-    )
+    # assuming linearity, we create an s-scan from the fmc based on the emission and reception delay-law
+    sscan = fmc2sscan_numba(
+        fmc=fmc,
+        shifts_e=delay_law_in_shifts,
+        shifts_r=delay_law_in_shifts
+    )[..., np.newaxis]
+
     sscan_env = envelope(sscan[..., 0], axis=0)
 
     if i == 0:
