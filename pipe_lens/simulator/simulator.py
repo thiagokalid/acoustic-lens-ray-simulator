@@ -17,7 +17,7 @@ class Simulator:
         self.gate_samples = len(self.tspan)
 
 
-    def simulate_scatterer(self, xf: float, zf: float) -> np.ndarray:
+    def simulate_scatterer(self, xf: float, zf: float, time_domain: bool=True) -> np.ndarray:
         if isinstance(xf, float) or isinstance(zf, int):
             xf = np.array([xf])
             zf = np.array([zf])
@@ -45,7 +45,9 @@ class Simulator:
         # Auld’s measurement model:
         fmc_w = (system_function_w * model.T).T # received-voltage Vo
 
-        # Transform to time-domain signal:
-        signal = np.real(np.fft.ifft(fmc_w, axis=0))
-
-        return signal
+        if time_domain:
+            # Transform to time-domain signal:
+            signal = np.real(np.fft.ifft(fmc_w, axis=0))
+            return signal
+        else:
+            return fmc_w

@@ -55,11 +55,11 @@ alpha_max = np.radians(50)
 alpha_0 = 0
 
 # Delay-law related:
-focus_angle = np.radians(30)
-focus_radius = 60e-3
+focus_angle = np.radians(5)
+focus_radius = 55e-3
 
 # Configure simulation:
-loss_model = LossModel(transmission=True, transmission_diffraction=True, reception_diffraction=True, attenuation=False)
+loss_model = LossModel(transmission=True, transmission_diffraction=False, reception_diffraction=False, attenuation=False)
 
 #%%
 # Create pipeline:
@@ -79,13 +79,18 @@ xfocus, zfocus = focus_radius * np.sin(focus_angle), focus_radius * np.cos(focus
 
 # Compute delay-law:
 physics = RayFocusThroughLens(acoustic_lens, pipeline, transducer)
-optimizer = NewtonOptimizer(alpha_max=alpha_max, alpha_min=acoustic_lens.alpha_min, max_iter=30, eps=1e-4)
+optimizer = NewtonOptimizer(alpha_max=alpha_max, alpha_min=acoustic_lens.alpha_min, max_iter=30, eps=1e-6)
 raytracer = RaytracerScenario(physics, optimizer)
 
 opt_rays = raytracer.solve(xfocus, zfocus)
 roundtrip_tofs = physics.compute_tofs(opt_rays)
 tofs_roi = roundtrip_tofs.diagonal(axis1=1, axis2=2).T / 2
 delay_law = np.mean(tofs_roi, axis=0) - tofs_roi
+delay_law = delay_law[..., 0]
+
+plt.figure()
+plt.plot(delay_law)
+plt.show(block=True)
 
 # Compute tensile-based field:
 physics = RayOnewayThroughLens(acoustic_lens, pipeline_shifted, transducer, loss_model)
@@ -94,11 +99,11 @@ raytracer = RaytracerScenario(physics, optimizer)
 simulation = Simulator(gate_start=60e-6, gate_end=80e-6, fs=62.5e6, raytracer=raytracer)
 
 # Define API scatterers grid:
-ang_step = 4
-radius_step = 1e-3
+ang_step = .5
+radius_step = .25e-3
 
-radius_span = np.arange(50e-3, 70e-3, 1e-3)
-ang_span = np.radians(np.arange(-45, 45 + ang_step, ang_step))
+radius_span = np.arange(50e-3, 70e-3, radius_step)
+ang_span = np.radians(np.arange(np.degrees(focus_angle) - 5, np.degrees(focus_angle) + 5 + ang_step, ang_step))
 
 RR, TT = np.meshgrid(radius_span, ang_span)
 XX, ZZ = RR * np.sin(TT), RR * np.cos(TT)
@@ -112,24 +117,35 @@ for (i, j), x in tqdm(
 ):
     z = ZZ[i, j]
 
-    fmc_t = simulation.simulate_scatterer(
-            np.asarray([x]),
-            np.asarray([z])
+    fmc_w = simulation.simulate_scatterer(
+        np.asarray([x]),
+        np.asarray([z]),
+        time_domain=False
     )
-    fmc_w = np.fft.fft(fmc_t, axis=0)
-    shift = np.exp(-1j * np.outer(simulation.omega, delay_law))
-    fmc_w = fmc_w[..., 0] * shift
-    ith_field = np.real(np.fft.ifft(fmc_w, axis=0))
+    shift = np.exp(-1j * np.multiply.outer(simulation.omega, delay_law))
+    ith_field = np.real(np.fft.ifft(fmc_w * shift, axis=0))
 
-    field[i, j] = np.sqrt(np.sum(ith_field**2))
+    # field[i, j] = np.sqrt(np.sum(ith_field**2))
+    fmc_w_delayed = fmc_w * shift
+
+    beam_w = np.sum(fmc_w_delayed, axis=1)
+
+    field[i, j] = np.max(np.abs(beam_w))
 
 # normalize the tension field just for plotting purposes:
-field = (field - field.min()) / (field.max() - field.min())
+field = field / field.max()
 
 #%%
 
 fig, axs = plt.subplots(figsize=(12, 8))
-axs.pcolormesh(XX * 1e3, ZZ * 1e3, field, cmap='RdBu')
+im = axs.pcolormesh(XX * 1e3, ZZ * 1e3, field, cmap='inferno')
+plt.colorbar(im)
+
+# find maximum
+imax, jmax = np.unravel_index(np.argmax(field), field.shape)
+axs.plot(XX[imax, jmax] * 1e3, ZZ[imax, jmax] * 1e3, "o", color='lime', markeredgewidth=1, markersize=12, markerfacecolor='none')
+axs.plot(xfocus * 1e3, zfocus * 1e3, "o", color='r',markersize=3)
+
 
 # plot pipe and lens overlay:
 axs.plot(pipeline.xout * 1e3, pipeline.zout * 1e3, '--', color='black')

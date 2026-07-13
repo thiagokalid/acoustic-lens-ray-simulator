@@ -27,7 +27,7 @@ class RayOnewayThroughLens(RayLensPhysics):
         n_samples = omega.shape[0]
         n_elem = self.transducer.num_elem
 
-        Ta = np.ones(shape=(n_samples, n_elem, n_elem), dtype=np.complex64)
+        Ta = np.ones(shape=(n_samples, n_elem), dtype=np.complex64)
 
         # time-of-flight delay:
         P = self.build_propagation_model(omega, rays, self.loss_model.propagation)
@@ -42,8 +42,7 @@ class RayOnewayThroughLens(RayLensPhysics):
         for tx in range(n_elem):
             # transmission coefficient:
             T1, _ = self.build_transmission_model(omega, rays[tx], self.loss_model.transmission)
-            for rx in range(n_elem):
-                Ta[:, tx, rx] *= P[:, tx] * T1 * C1[:, tx] * M[:, tx]
+            Ta[:, tx] *= P[:, tx] * T1 * C1[:, tx] * M[:, tx]
 
         return Ta
 
