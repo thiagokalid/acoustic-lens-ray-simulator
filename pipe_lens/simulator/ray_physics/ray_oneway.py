@@ -47,11 +47,14 @@ class RayOnewayThroughLens(RayLensPhysics):
         return Ta
 
     def build_attenuation_model(self, w, rays: List[Ray], flag):
-        d_i = np.zeros(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
-        for tx, ray_tx in enumerate(rays):
-            d_i[:, tx] = ray_tx.compute_dist()
+        if flag:
+            d_i = np.zeros(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
+            for tx, ray_tx in enumerate(rays):
+                d_i[:, tx] = ray_tx.compute_dist()
 
-        return 1/np.sqrt(d_i)
+            return 1/np.sqrt(d_i)
+        else:
+            return np.ones(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
 
     def build_transmission_model(self, omega, rays: Ray, flag: bool):
         if flag:

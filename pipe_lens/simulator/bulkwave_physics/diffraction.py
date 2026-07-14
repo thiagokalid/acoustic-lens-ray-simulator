@@ -1,11 +1,13 @@
 import numpy as np
 
+__all__ = ['far_field_directivity', 'far_field_directivity_solid']
+
 def sinc_(theta):
     return np.sin(theta) / theta
 
 def far_field_directivity(theta, element_width, lambda_w):
     theta = np.asarray(theta, dtype=np.complex64)
-    return sinc_(np.pi * element_width * np.sin(theta) / lambda_w)
+    return sinc_(np.pi / lambda_w * element_width * np.sin(theta) )
 
 def F0(zeta, cL, cS):
     zeta = np.asarray(zeta, dtype=np.complex64)
