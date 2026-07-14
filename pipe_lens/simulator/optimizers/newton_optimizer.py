@@ -37,7 +37,7 @@ class NewtonOptimizer(RayOptimizer):
     verbose: bool
         Flag que define se irá ser mostrado informações como progresso, prints de debug, etc.
     """
-    def __init__(self, alpha_max: float, max_iter: int = 10, eps: float = 1e-4, alpha_min: float = 0., learning_rate: float = 1, dist_tolerance: float = 1e-6, init_guess: np.ndarray | None = None, verbose: bool = False):
+    def __init__(self, alpha_max: float, max_iter: int = 10, eps: float = 1e-4, alpha_min: float = 0., learning_rate: float = 1, dist_tolerance: float = 1e-8, init_guess: np.ndarray | None = None, verbose: bool = False):
         super().__init__(alpha_max, alpha_min, verbose)
         if init_guess is None:
             self.init_guess = init_guess
