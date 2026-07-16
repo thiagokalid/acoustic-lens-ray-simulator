@@ -28,7 +28,7 @@ class RayLensPhysics(RayPhysics, ABC):
         acoustic_lens: AcousticLens,
         pipeline: Pipeline,
         transducer: Transducer,
-        loss_model: LossModel | None = None,
+        loss_model: LossModel = LossModel(),
         modes: tuple[str, str, str] = ("L", "L", "L")
     ):
         super().__init__(pipeline, transducer, loss_model)

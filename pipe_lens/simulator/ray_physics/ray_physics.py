@@ -36,12 +36,12 @@ class RayPhysics(ABC):
     def __init__(self,
                  pipeline: Pipeline,
                  transducer: Transducer,
-                 loss_model: LossModel | None = None
+                 loss_model: LossModel = LossModel()
                  ):
 
         self.transducer = transducer
         self.pipeline = pipeline
-        self.loss_model = loss_model if loss_model is not None else LossModel()
+        self.loss_model = loss_model
 
     def get_cost_function_for_ray(self, xc: float, yc: float, xf: np.ndarray, yf: np.ndarray, eps: float = 1e-4):
         """
