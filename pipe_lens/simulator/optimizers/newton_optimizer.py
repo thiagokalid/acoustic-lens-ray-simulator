@@ -90,7 +90,7 @@ class NewtonOptimizer(RayOptimizer):
 
         results = [None] * N_elem
 
-        for i in tqdm(range(0, N_elem // 2), disable=not self.verbose):
+        for i in tqdm(range(0, N_elem // 2), disable=not self.verbose, desc="Finding optimal rays"):
             pairs = [
                 int(N_elem // 2 - i - 1), # marching towards the left
                 int(N_elem // 2 + i) # marching towards the right
