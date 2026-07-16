@@ -1,8 +1,23 @@
+from matplotlib import rcParams
+
+rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Nimbus Roman", "DejaVu Serif"],
+    "font.size": 10,
+    "axes.labelsize": 10,
+    "axes.titlesize": 10,
+    "legend.fontsize": 9,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+})
+
 import matplotlib
-
-from pipe_lens.utils import convert_parameters
-
 matplotlib.use("TkAgg")
+
+LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
+
+from pathlib import Path
+project_root = Path(__file__).resolve().parent.parent
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,10 +32,10 @@ from pipe_lens.simulator.optimizers.newton_optimizer import NewtonOptimizer
 from pipe_lens.simulator.raytracer_scenario import RaytracerScenario
 from pipe_lens.simulator.simulator import Simulator
 from pipe_lens.types import Solid, Fluid
+from pipe_lens.utils import convert_parameters
 from itertools import product
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
-
 
 def compute_field_point(x, z):
     fmc_w = simulation.simulate_scatterer(
@@ -80,8 +95,8 @@ if __name__ == "__main__":
 
     #%%
     # Create pipeline:
-    pipeline = Pipeline(pipe_material, outer_radius, wall_thickness, center)
-    pipeline_shifted = Pipeline(pipe_material, outer_radius, wall_thickness, (0, 0))
+    pipeline = Pipeline(pipe_material, outer_radius, wall_thickness, center=(0, 0))
+    pipeline_shifted = Pipeline(pipe_material, outer_radius, wall_thickness, center=(0, 0))
 
     # Create acoustic lens:
     acoustic_lens = AcousticLens(wedge_material, coupling_medium, d, alpha_max, alpha_0, h0, outer_radius)
@@ -92,7 +107,7 @@ if __name__ == "__main__":
 
     #%% Simulation:
 
-    xfocus, zfocus = focus_radius * np.sin(focus_angle), focus_radius * np.cos(focus_angle)
+    xfocus, zfocus = focus_radius * np.sin(focus_angle) + pipeline_shifted.xcenter, focus_radius * np.cos(focus_angle) + pipeline_shifted.zcenter
 
 
     # Convergent-wave delay law:
@@ -113,9 +128,6 @@ if __name__ == "__main__":
     # delay_law[steering_angle < 0] = pitch/acoustic_lens.c1 * np.outer(abs(np.sin(steering_angle)), (transducer.num_elem - i))[steering_angle < 0]
     # delay_law = delay_law[0, :]
 
-    plt.figure()
-    plt.plot(delay_law)
-    plt.show(block=True)
 
     # Compute tensile-based field:
     physics = RayOnewayThroughLens(acoustic_lens, pipeline_shifted, transducer, loss_model)
@@ -131,7 +143,7 @@ if __name__ == "__main__":
     ang_span = np.radians(np.arange(np.degrees(focus_angle) - 20, np.degrees(focus_angle) + 20 + ang_step, ang_step))
 
     RR, TT = np.meshgrid(radius_span, ang_span)
-    XX, ZZ = RR * np.sin(TT), RR * np.cos(TT)
+    XX, ZZ = RR * np.sin(TT) + pipeline_shifted.xcenter, RR * np.cos(TT) + pipeline_shifted.zcenter
 
     field = np.empty_like(XX, dtype=float)
 
@@ -153,25 +165,63 @@ if __name__ == "__main__":
 
 
     #%%
-
-    fig, axs = plt.subplots(figsize=(8, 8))
-    im = axs.pcolormesh(XX * 1e3, ZZ * 1e3, field, cmap='inferno')
+    PLOT_FOR_PAPER = True
+    if PLOT_FOR_PAPER:
+        fig, axs = plt.subplots(figsize=(LATEX_LINEWIDTH * .5, 2.4))
+    else:
+        fig, axs = plt.subplots(figsize=(8, 8))
+    im = axs.pcolormesh(XX * 1e3, ZZ * 1e3, field/field.max(), cmap='inferno', rasterized=True,)
     plt.colorbar(im)
 
     # find maximum
     imax, jmax = np.unravel_index(np.argmax(field), field.shape)
-    axs.plot(XX[imax, jmax] * 1e3, ZZ[imax, jmax] * 1e3, "o", color='lime', markeredgewidth=1, markersize=12, markerfacecolor='none')
-    axs.plot(xfocus * 1e3, zfocus * 1e3, "o", color='r',markersize=3)
+    # axs.plot(XX[imax, jmax] * 1e3, ZZ[imax, jmax] * 1e3, "o", color='lime', markeredgewidth=1, markersize=12, markerfacecolor='none', label="Local max")
+    axs.plot(xfocus * 1e3, zfocus * 1e3, "o", color='lime',markersize=3, label="Focus")
 
 
     # plot pipe and lens overlay:
-    axs.plot(pipeline.xout * 1e3, pipeline.zout * 1e3, '--', color='black')
-    axs.plot(pipeline.xint * 1e3, pipeline.zint * 1e3, '--', color='black')
-    axs.plot(acoustic_lens.xlens * 1e3, acoustic_lens.zlens * 1e3, '--', color='black')
-    axs.plot(transducer.xt * 1e3, transducer.zt * 1e3, 's', color='black')
+
+    axs.plot(pipeline_shifted.xout * 1e3, pipeline_shifted.zout * 1e3, '--', color='black', label="Real tube position")
+    axs.plot(pipeline_shifted.xint * 1e3, pipeline_shifted.zint * 1e3, '--', color='black', label="_")
+    axs.plot(acoustic_lens.xlens * 1e3, acoustic_lens.zlens * 1e3, '--', color='black', label="_")
+    axs.plot(transducer.xt * 1e3, transducer.zt * 1e3, 's', color='black', label="Transducer")
 
     axs.set_aspect('equal')
     axs.set_xlabel("x-axis / (mm)")
     axs.set_ylabel("z-axis / (mm)")
-    axs.set_title("RMS normal stress field")
-    axs.set_ylim([25, 220])
+
+
+    if PLOT_FOR_PAPER:
+        axs.set_ylim([25, 100])
+        axs.set_xlim([-50, 50])
+
+    else:
+        axs.set_ylim([25, 220])
+        axs.plot(pipeline.xout * 1e3, pipeline.zout * 1e3, '-', color='r', alpha=.5, lw=3, label="Assumed tube position for delay-law focusing")
+        axs.plot(pipeline.xint * 1e3, pipeline.zint * 1e3, '-', color='r', alpha=.5, lw=3, label="_")
+        axs.set_title("RMS pressure field")
+        plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(project_root / "figures" / "rms_pfield_convergent_wave.pdf")
+    plt.show()
+
+
+    #%%
+    if PLOT_FOR_PAPER:
+        fig, axs = plt.subplots(figsize=(LATEX_LINEWIDTH * .5, 2.4))
+    else:
+        fig, axs = plt.subplots(figsize=(8, 8))
+
+    bars = axs.bar(
+        x=np.arange(transducer.num_elem),
+        height=(delay_law - delay_law.min()) * 1e6,
+        color='b'
+    )
+    axs.set_xticks(np.arange(0, 64 + 8, 8))
+    axs.set_xlabel("Transducer element")
+    axs.set_ylabel(r"Transmission delay / ($\mathrm{\mu s}$)")
+
+    plt.tight_layout()
+    plt.savefig(project_root / "figures" / "rms_field_delaylaw.pdf")
+    plt.show(block=True)

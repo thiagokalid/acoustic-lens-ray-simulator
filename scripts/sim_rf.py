@@ -1,13 +1,29 @@
+from matplotlib import rcParams
+
+rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Nimbus Roman", "DejaVu Serif"],
+    "font.size": 10,
+    "axes.labelsize": 10,
+    "axes.titlesize": 10,
+    "legend.fontsize": 9,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+})
+
 import matplotlib
-
-from pipe_lens.utils import convert_parameters
-
 matplotlib.use("TkAgg")
+
+LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
+
+from pathlib import Path
+project_root = Path(__file__).resolve().parent.parent
 
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from pipe_lens.utils import convert_parameters
 from pipe_lens.acoustic_lens import AcousticLens
 from pipe_lens.pipeline import Pipeline
 from pipe_lens.transducer import Transducer
@@ -24,6 +40,7 @@ from pipe_lens.utils import api_polar, convert_time2radius
 
 #%% USER INPUT:
 
+LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
 PLOT_SSCANS = True
 
 # Materials related:
@@ -62,7 +79,7 @@ focus_alpha_min = np.radians(-50)
 focus_radial_pos = 50e-3
 
 # Configure simulation:
-loss_model = LossModel(transmission=True, transmission_diffraction=True, reception_diffraction=True, attenuation=False)
+loss_model = LossModel(transmission=False, transmission_diffraction=False, reception_diffraction=False, attenuation=False)
 
 #%%
 # Create pipeline:
@@ -83,7 +100,7 @@ focus_alpha_pos = np.arange(focus_alpha_min, focus_alpha_max + focus_alpha_step,
 xfocus, zfocus = focus_radial_pos * np.sin(focus_alpha_pos), focus_radial_pos * np.cos(focus_alpha_pos)
 
 # Compute delay-law:
-physics = RayFocusThroughLens(acoustic_lens, pipeline, transducer)
+physics = RayFocusThroughLens(acoustic_lens, pipeline, transducer, loss_model)
 optimizer = NewtonOptimizer(alpha_max=alpha_max, alpha_min=acoustic_lens.alpha_min, max_iter=15, eps=1e-4)
 raytracer = RaytracerScenario(physics, optimizer)
 
@@ -110,7 +127,7 @@ radius_span = convert_time2radius(
 
 # Define API scatterers grid:
 r_scatterer = 60e-3
-theta_scatterer = np.radians(np.arange(30, 50 + 5, 5))
+theta_scatterer = np.radians(np.arange(0, 50 + 1, 1))
 
 x_scatterer, z_scatterer = r_scatterer * np.sin(theta_scatterer), r_scatterer * np.cos(theta_scatterer)
 
@@ -143,7 +160,7 @@ for i in tqdm(range(len(theta_scatterer))):
         api_polar(sscan_env, radius_span, focus_alpha_pos, corners_in, drawSquare=True)
 
     if PLOT_SSCANS:
-        plt.figure()
+        fig, axs = plt.subplots(figsize=(LATEX_LINEWIDTH * .4, 2.4))
         sscan_db = np.log10(sscan_env / ref_amplitude + 1E-6)
         plt.imshow(sscan_db, vmin=-3, vmax=0, extent=[np.degrees(focus_alpha_min), np.degrees(focus_alpha_max), simulation.gate_end * 1e6, simulation.gate_start * 1e6],cmap="inferno", aspect='auto')
         plt.axhline(y=acoustic_lens.t_outer * 1e6, color='lime', ls='--', lw=1.5)
@@ -154,30 +171,47 @@ for i in tqdm(range(len(theta_scatterer))):
         plt.plot(np.degrees(theta_scatterer[i]), (acoustic_lens.t_outer + 2 * delta_thickness/pipeline.material.cp) * 1e6, 'o', markerfacecolor="None", color='lime', ms=15)
         plt.xlabel("Angular position / (degrees)")
         plt.ylabel(r"Time / $\mathrm{(\mu s)}$")
+        plt.ylim([70, 60])
+        plt.xticks(np.arange(-50, 50 + 25, 25))
+        plt.tight_layout()
+        plt.savefig(project_root / "figures" / f"sample_sscan_{np.degrees(theta_scatterer[i]):.0f}deg.pdf")
         plt.show(block=True)
 
 
 #%%
-fig, axs = plt.subplots(figsize=(16, 8), nrows=1, ncols=2)
-plt.suptitle("Resolution measured by considering punctual scatterer.")
+PLOT_FOR_PAPER = True
 
-ax = axs[0]
-ax.plot(np.degrees(theta_scatterer), np.asarray(fwhm_horizontal) * 1e3, '-or', label="Horizontal FWHM")
+# if PLOT_FOR_PAPER:
+# else:
+fig, ax = plt.subplots(figsize=(LATEX_LINEWIDTH * .55, 2.4))
+if not PLOT_FOR_PAPER:
+    plt.suptitle("Resolution measured by considering punctual scatterer.")
+    ax.set_title("Full Width at Half Maximum (FWHM)")
+ax.plot(np.degrees(theta_scatterer), np.asarray(fwhm_horizontal) / np.asarray(fwhm_horizontal).max(), ':ok', label="Horizontal FWHM", ms=5)
 # ax.plot(-np.degrees(theta_scatterer), np.asarray(fwhm_horizontal) * 1e3, '-or')
 # ax.plot(np.degrees(theta_scatterer), np.asarray(fwhm_vertical)/fwhm_vertical[0] * 100, '-ob', label="Vertical FWHM")
-# ax.plot(-np.degrees(theta_scatterer), np.asarray(fwhm_vertical)/fwhm_vertical[0] * 100, '-ob')
-ax.set_title("Full Width at Half Maximum (FWHM)")
 ax.set_xlabel("Scatterer angular location / (degrees)")
 ax.set_ylabel("Length / (mm)")
-ax.grid()
-ax.legend()
+# ax = plt.twinx()
+# ax.plot(np.degrees(theta_scatterer), np.asarray(fwhm_vertical) * 1e3, '-ob')
 
-ax = axs[1]
-ax.plot(np.degrees(theta_scatterer), np.asarray(amplitudes_v), '-or')
+
+if not PLOT_FOR_PAPER:
+    ax.legend()
+
+ax.grid()
+plt.tight_layout()
+plt.savefig(project_root / "figures" / "norm_fwhm_sim.pdf")
+plt.show()
+
+fig, ax = plt.subplots(figsize=(LATEX_LINEWIDTH * .55, 2.4))
+ax.plot(np.degrees(theta_scatterer), np.asarray(amplitudes_v) / np.asarray(amplitudes_v).max(), ':ok', ms=5)
 # ax.plot(-np.degrees(theta_scatterer), np.asarray(amplitudes_v), '-or')
-ax.set_title("Amplitudes")
+if not PLOT_FOR_PAPER:
+    ax.set_title("Amplitudes")
 ax.set_xlabel("Scatterer angular location / (degrees)")
 ax.set_ylabel("Amplitude")
 ax.grid()
-
+plt.tight_layout()
+plt.savefig(project_root / "figures" / "norm_amplitude_sim.pdf")
 plt.show()
