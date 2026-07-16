@@ -1,8 +1,6 @@
 import numpy as np
 
 from pipe_lens.simulator.raytracer_scenario import RaytracerScenario
-from pipe_lens.simulator.utils import fmc_sim_kernel_gaussian
-from scipy.signal import hilbert
 
 __all__ = ["Simulator"]
 
