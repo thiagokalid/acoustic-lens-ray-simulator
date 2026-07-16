@@ -54,11 +54,11 @@ class RayFocusThroughLens(RayLensPhysics):
         return Ta
 
     def build_attenuation_model(self, w, rays: List[Ray], flag):
-        d_i = np.zeros(shape=(w.shape[0], self.transducer.num_elem, self.transducer.num_elem), dtype=np.complex64)
-        for tx, ray_tx in enumerate(rays):
-            for rx, ray_rx in enumerate(rays):
-                d_i[:, tx, rx] = ray_tx.compute_dist() + ray_rx.compute_dist()
-
+        d_i = np.ones(shape=(w.shape[0], self.transducer.num_elem, self.transducer.num_elem), dtype=np.complex64)
+        if flag:
+            for tx, ray_tx in enumerate(rays):
+                for rx, ray_rx in enumerate(rays):
+                    d_i[:, tx, rx] = ray_tx.compute_dist() + ray_rx.compute_dist()
         return 1/np.sqrt(d_i)
 
     def build_transmission_model(self, omega, rays: Ray, flag: bool):
@@ -201,4 +201,3 @@ class RayFocusThroughLens(RayLensPhysics):
             medium = (self.medium1, self.medium2, self.medium3),
             modes= self.modes
         )
-
