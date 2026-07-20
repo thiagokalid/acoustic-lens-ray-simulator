@@ -22,6 +22,10 @@ class LossModel:
     attenuation: bool = False
     reception_diffraction: bool = False
 
+    def __post_init__(self):
+        if not self.propagation:
+            raise Warning("Be careful. Not allowing propagation delay might lead to unexpected behaviour.")
+
 class RayPhysics(ABC):
     """Classe abstrata que irá conter toda física de propagação de ondas, assim como a função-custo que será
     usada para encontrar os raios ótimos.
