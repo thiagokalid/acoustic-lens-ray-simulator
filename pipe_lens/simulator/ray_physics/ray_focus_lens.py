@@ -9,10 +9,12 @@ from scipy.optimize import minimize
 
 # modules implemented in this repo
 from pipe_lens.simulator.ray_physics.ray_lens_physics import RayLensPhysics
-from pipe_lens.types import Fluid, Solid, Ray
+from pipe_lens.types import Ray, COMPLEX
 from pipe_lens.simulator.ray_physics.utils import snell, uhp, roots_bhaskara
-from pipe_lens.simulator.bulkwave_physics.diffraction import far_field_directivity_solid
-from pipe_lens.simulator.bulkwave_physics.transmission import compute_tension_transmission_coefficient, compute_tension_reflection_coefficient
+from pipe_lens.simulator.bulkwave_physics import far_field_directivity_solid
+from pipe_lens.simulator.bulkwave_physics import compute_tension_transmission_coefficient
+from pipe_lens.simulator.bulkwave_physics import two_media_geom_spread
+
 
 __all__ = ['RayFocusThroughLens']
 
@@ -53,13 +55,43 @@ class RayFocusThroughLens(RayLensPhysics):
 
         return Ta
 
+    def build_propagation_model(self, w, rays, flag: bool):
+        tof_mtx = self.compute_tofs(rays) # TOF from TX to RX, thus matrix with size TX by RX
+        if flag:
+            # compute the phase-term of the propagation model:
+            F = np.exp(-1j * w * tof_mtx.T).T
+
+            # compute the geometric-spreading term
+            G = np.ones_like(F)
+            for tx, ray_tx in enumerate(rays):
+                for rx, ray_rx in enumerate(rays):
+                    d1_tx, d2_tx, d3_tx = ray_tx.compute_segment_dist()
+                    d1_rx, d2_rx, d3_rx = ray_rx.compute_segment_dist()
+
+
+                    G[:, tx, rx] = np.multiply(
+                        # from tx towards the reflector:
+                        two_media_geom_spread(d1_tx, d2_tx, ray_tx.ang_i[0], ray_tx.ang_t[0], self.c1, self.c2),
+                        two_media_geom_spread(d2_tx, d3_tx, ray_tx.ang_i[1], ray_tx.ang_t[1], self.c2, self.c3)
+                    ) * np.multiply(
+                        # from the reflector towards the rx:
+                        two_media_geom_spread(d3_rx, d2_rx, ray_rx.ang_t[1], ray_tx.ang_i[1], self.c3, self.c2),
+                        two_media_geom_spread(d2_rx, d1_rx, ray_rx.ang_t[0], ray_tx.ang_i[0], self.c2, self.c1),
+                    )
+            return F * G
+        else:
+            return np.ones_like(w * tof_mtx, dtype=COMPLEX)
+
     def build_attenuation_model(self, w, rays: List[Ray], flag):
-        d_i = np.ones(shape=(w.shape[0], self.transducer.num_elem, self.transducer.num_elem), dtype=np.complex64)
+        M = np.ones(shape=(w.shape[0], self.transducer.num_elem, self.transducer.num_elem), dtype=np.complex64)
         if flag:
             for tx, ray_tx in enumerate(rays):
                 for rx, ray_rx in enumerate(rays):
-                    d_i[:, tx, rx] = ray_tx.compute_dist() + ray_rx.compute_dist()
-        return 1/np.sqrt(d_i)
+                    d1_tx, d2_tx, d3_tx = ray_tx.compute_segment_dist()
+                    d1_rx, d2_rx, d3_rx = ray_rx.compute_segment_dist()
+
+                    M[:, tx, rx] = 1.
+        return M
 
     def build_transmission_model(self, omega, rays: Ray, flag: bool):
         if flag:

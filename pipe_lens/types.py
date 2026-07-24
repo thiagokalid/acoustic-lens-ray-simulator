@@ -162,6 +162,27 @@ class Ray:
             self._tof = self.compute_tof()
         return self._tof
 
+    def compute_segment_dist(self):
+        """ Calcula a distância total percorrida do raio em cada segmento.
+
+        Returns
+        -------
+        total_dist: list
+            Lista de Array 2D com distância do(s) raio(s).
+        """
+        total_dist = list()
+
+        for i in range(self.n_medium):
+            x1 = self.xray[i]
+            z1 = self.zray[i]
+
+            x2 = self.xray[i + 1]
+            z2 = self.zray[i + 1]
+
+            total_dist.append(sqrt(square(x1 - x2) + square(z1 - z2)))
+
+        return total_dist
+
     def compute_dist(self):
         """ Calcula a distância total percorrida do raio.
 

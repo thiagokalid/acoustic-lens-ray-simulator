@@ -107,8 +107,8 @@ def api_polar(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=T
     pixels_area = np.abs(pixels_area)
     #
     api = np.sum(pixels_area[pixels_above_threshold])
-    estimated_width = np.max(pixels_coords[pixels_above_threshold, 0]) - np.min(pixels_coords[pixels_above_threshold, 0])
-    estimated_height = np.max(pixels_coords[pixels_above_threshold, 1]) - np.min(pixels_coords[pixels_above_threshold, 1])
+    estimated_height = np.max(pixels_coords[pixels_above_threshold, 0]) - np.min(pixels_coords[pixels_above_threshold, 0])
+    estimated_width = np.max(pixels_coords[pixels_above_threshold, 1]) - np.min(pixels_coords[pixels_above_threshold, 1])
 
     if drawSquare:
         width = 2

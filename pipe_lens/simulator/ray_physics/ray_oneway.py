@@ -11,8 +11,8 @@ from scipy.optimize import minimize
 from pipe_lens.simulator.ray_physics.ray_lens_physics import RayLensPhysics
 from pipe_lens.types import Fluid, Solid, Ray
 from pipe_lens.simulator.ray_physics.utils import snell, uhp, roots_bhaskara
-from pipe_lens.simulator.bulkwave_physics.diffraction import far_field_directivity_solid
-from pipe_lens.simulator.bulkwave_physics.transmission import compute_tension_transmission_coefficient, compute_tension_reflection_coefficient
+from pipe_lens.simulator.bulkwave_physics import far_field_directivity_solid
+from pipe_lens.simulator.bulkwave_physics import compute_tension_transmission_coefficient, compute_tension_reflection_coefficient
 
 __all__ = ['RayOnewayThroughLens']
 
