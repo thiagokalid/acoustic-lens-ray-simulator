@@ -22,32 +22,32 @@ class RayOnewayThroughLens(RayLensPhysics):
     apenas uma refração na lente.
 
     """
-    def build_measurement_model(self, omega, rays: List[Ray], gate_start=0.):
+    def build_measurement_model(self, w, rays: List[Ray], gate_start=0.):
 
-        n_samples = omega.shape[0]
+        n_samples = w.shape[0]
         n_elem = self.transducer.num_elem
 
         Ta = np.ones(shape=(n_samples, n_elem), dtype=np.complex64)
 
         # time-of-flight delay:
-        P = self.build_propagation_model(omega, rays, self.loss_model.propagation)
+        P = self.build_propagation_model(w, rays, self.loss_model.propagation)
 
         # transmission diffraction correction:
-        C1 = self.build_diffraction_tx_model(omega, rays, self.loss_model.transmission_diffraction)
+        C1 = self.build_diffraction_tx_model(w, rays, self.loss_model.transmission_diffraction)
 
         # spatial attenuation:
-        M = self.build_attenuation_model(omega, rays, self.loss_model.attenuation)
+        M = self.build_attenuation_model(w, rays, self.loss_model.attenuation)
 
         # Computing amplitude:
         for tx in range(n_elem):
             # transmission coefficient:
-            T1, _ = self.build_transmission_model(omega, rays[tx], self.loss_model.transmission)
+            T1 = self.build_transmission_model(w, rays[tx], self.loss_model.transmission)
             Ta[:, tx] *= P[:, tx] * T1 * C1[:, tx] * M[:, tx]
 
         return Ta
 
-    def build_attenuation_model(self, w, rays: List[Ray], flag):
-        if flag:
+    def build_attenuation_model(self, w, rays: List[Ray], enabled):
+        if enabled:
             d_i = np.zeros(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
             for tx, ray_tx in enumerate(rays):
                 d_i[:, tx] = ray_tx.compute_dist()
@@ -56,8 +56,8 @@ class RayOnewayThroughLens(RayLensPhysics):
         else:
             return np.ones(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
 
-    def build_transmission_model(self, omega, rays: Ray, flag: bool):
-        if flag:
+    def build_transmission_model(self, w, rays: Ray, enabled: bool):
+        if enabled:
             # Transmission Aluminium to water:
             T12 = compute_tension_transmission_coefficient(
                 inc_ang=rays.ang_i[0], trans_ang=rays.ang_t[0],
@@ -77,25 +77,25 @@ class RayOnewayThroughLens(RayLensPhysics):
         else:
             T1  = 1.
 
-        return T1, -1.
+        return T1
 
-    def build_diffraction_tx_model(self, omega, rays: List[Ray], flag: bool):
+    def build_diffraction_tx_model(self, w, rays: List[Ray], enabled: bool):
         Nrays = int(len(rays))
-        if flag:
+        if enabled:
             thetas = np.zeros(Nrays)
             for i, ray in enumerate(rays):
                 thetas[i] = np.pi/2 - np.arctan2(np.abs(ray.zray[0] - ray.zray[1]), np.abs(ray.xray[0] - ray.xray[1]))
             return far_field_directivity_solid(2 * np.pi * self.transducer.fc, thetas[:, np.newaxis], self.transducer.element_width, self.acoustic_lens.wedge_medium.cp, self.acoustic_lens.wedge_medium.cs).T
         else:
-            return np.ones(shape=(omega.shape[0], Nrays))
+            return np.ones(shape=(w.shape[0], Nrays))
 
-    def compute_tofs(self, solution):
+    def compute_tofs(self, optimal_rays: List[Ray]):
         n_elem = self.transducer.num_elem
-        n_focii = solution[0].n_focus
+        n_focii = optimal_rays[0].n_focus
 
 
         coord_elements = np.array([self.transducer.xt, self.transducer.zt]).T
-        coords_reflectors = np.array([solution[0].xray[-1], solution[0].zray[-1]]).T
+        coords_reflectors = np.array([optimal_rays[0].xray[-1], optimal_rays[0].zray[-1]]).T
         coords_lens = np.zeros((n_elem, 2, n_focii))
         coords_outer = np.zeros((n_elem, 2, n_focii))
 
@@ -103,8 +103,8 @@ class RayOnewayThroughLens(RayLensPhysics):
             i = combined_idx // n_elem
             j = combined_idx % n_elem
 
-            coords_lens[j, 0, i], coords_lens[j, 1, i] = solution[j].xray[1][i], solution[j].zray[1][i]
-            coords_outer[j, 0, i], coords_outer[j, 1, i] = solution[j].xray[2][i], solution[j].zray[2][i]
+            coords_lens[j, 0, i], coords_lens[j, 1, i] = optimal_rays[j].xray[1][i], optimal_rays[j].zray[1][i]
+            coords_outer[j, 0, i], coords_outer[j, 1, i] = optimal_rays[j].xray[2][i], optimal_rays[j].zray[2][i]
 
         coord_elements_mat = np.tile(coord_elements[:, :, np.newaxis], (1, 1, n_focii))
         coord_reflectors_mat = np.tile(coords_reflectors[:, :, np.newaxis], (1, 1, n_elem))
@@ -116,7 +116,7 @@ class RayOnewayThroughLens(RayLensPhysics):
         oneway_tofs = (d1 / self.c1 + d2 / self.c2 + d3 / self.c3)
         return oneway_tofs.T
 
-    def _dist_kernel(self, xc: float, zc: float, xf: ndarray, yf: ndarray, acurve: float):
+    def _dist_kernel(self, xc: float, zc: float, xf: ndarray, zf: ndarray, acurve: ndarray):
 
         # Ponto x,y da lente avaliado em relação a alfa.
         xlens, ylens = self.acoustic_lens.xy_from_alpha(acurve)
@@ -153,11 +153,11 @@ class RayOnewayThroughLens(RayLensPhysics):
         # Reta perpendicular ao raio rafratado dentro do tubo:
         xbottom = -b3 / a3
         a4 = -1 / a3
-        b4 = yf - a4 * xf
+        b4 = zf - a4 * xf
 
         xin = (b4 - b3) / (a3 - a4)
         yin = a3 * xin + b3
-        dist = (xin - xf)**2 + (yin - yf)**2
+        dist = (xin - xf)**2 + (yin - zf)**2
 
 
         xc_mtx = xc * np.ones_like(xlens)
