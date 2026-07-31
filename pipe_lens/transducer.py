@@ -28,7 +28,7 @@ class Transducer:
         Coordenadas (x, z) do centro do transdutor, em metros.
     """
     def __init__(self, pitch: float = .4e-3, num_elem: int = 64, element_gap:float = .1e-3, fc: float = 5e6, bw: float = .4, bwr: float = -6,
-                 pulse_type: str = "gaussian", center: tuple[float, float] = (0., 0.), rotation_ang: float = 0.):
+                 pulse_type: str = "gaussian", center: tuple[float, float] = (0., 0.), rotation_ang: float = 0., gain_db: float = 0.):
         self.pitch = pitch
         self.num_elem = num_elem
         self.fc = fc
@@ -36,6 +36,7 @@ class Transducer:
         self.bw = bw  # Hz
         self.bwr = bwr  # dB
         self.pulse_type = pulse_type
+        self.gain = 10 ** (gain_db / 20)
 
         # SciPy definition of 'a'
         self.ref = 10 ** (self.bwr / 20)
@@ -73,7 +74,7 @@ class Transducer:
 
     def compute_time_domain_response(self, t):
         if self.pulse_type == "gaussian":
-            return np.exp(-self.a * t * t) * np.cos(2 * np.pi * self.fc * t)
+            return self.gain * np.exp(-self.a * t * t) * np.cos(2 * np.pi * self.fc * t)
         else:
             raise NotImplementedError
 
@@ -86,7 +87,7 @@ class Transducer:
                     np.exp(-(omega + omega_c) ** 2 / (4 * self.a))
             )
 
-            return spectrum.astype(np.complex64)
+            return (self.gain * spectrum).astype(np.complex64)
         else:
             raise NotImplementedError
 
