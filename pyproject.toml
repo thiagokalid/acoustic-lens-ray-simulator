@@ -1,13 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "acoustic-lens-ray-simulator"
 version = "0.1.0"
-description = "."
+description = "A ray tracing simulator for acoustic lens analysis."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
 authors = [
     { name = "Thiago E. Kalid", email = "thiagokkalid@gmail.com" },
 ]
-license = { file = "MIT" }
-readme = "README.md"
-requires-python = ">=3.10"
 dependencies = [
     "numpy",
     "matplotlib",
@@ -16,3 +20,12 @@ dependencies = [
     "scipy",
     "numba",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+# Standard package discovery for setuptools
+[tool.setuptools.packages.find]
+where = ["."]

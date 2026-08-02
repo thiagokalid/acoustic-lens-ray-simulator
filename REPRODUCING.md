@@ -26,37 +26,37 @@ using a virtual environment (venv):
 
 1. Inside the cloned repository (or an unzipped version), create a new virtual by
    ```
-   python3 -m venv /path/to/environment
+   python -m venv /path/to/environment
    ```
-   
+  
 1. Activate the new environment by running:
    ```
    source /path/to/environment/bin/activate
    ```
 
-1. Finally, install all packages from the `requirements.txt` or `pyproject.toml`, respectively:
+1. Finally, install all packages from the  `pyproject.toml` or `requirements.txt`, respectively:
    ```
-   python3 -m pip install -r requirements.txt
-   ```
+   pip install -e .
+   ```   
    or
    ```
-   python3 -m pip install .
+   pip install -r requirements.txt
    ```
-
+   
 
 ## Generating the results from the paper
 
 All results and their associated figures are created by the notebooks in the
 `scripts` folder. To generate results from scratch, you must run all scripts. 
 Each script is assigned a number before its name; the number dictates the order
-that you must follow when running them. An alternative is running `/scripts/main.py`
+that you must follow when running them. An alternative is running `scripts/main.py`
 that executes all scripts in the proper order. 
 
 We also made the pre-trained models publicly available on the Zenodo repository. 
-Under these circumstances, you can start from the `/5_test.py` (included) to generate all
+Under these circumstances, you can start from the `scripts/5_test.py` (included) to generate all
 figures presented in the paper.
 
-After running the scripts, new figures will be generated in the `figures` folder. Since all 
+After running the scripts, new figures will be generated in the `figures/` folder. Since all 
 figures presented in the paper were previously generated and updated to the repo, it might
 appear that there wasn't a new file. Some scripts might take a while to run and
 require a good amount of RAM, so be aware.
@@ -64,4 +64,4 @@ require a good amount of RAM, so be aware.
 With the environment activated, run each script by:
 
 ```
-python3 scripts/script_name.py
+python scripts/script_name.py

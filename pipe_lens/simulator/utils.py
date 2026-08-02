@@ -8,7 +8,7 @@ import numpy as np
 
 from numpy import ndarray
 
-__all__ = ['dist', 'fmc_sim_kernel_gaussian', 'numba_gausspulse', 'fmc2sscan']
+__all__ = ['dist', 'fmc_sim_kernel_gaussian', 'numba_gausspulse', 'fmc2sscan', 'fmc2sscan_numba']
 
 FLOAT = np.float32
 

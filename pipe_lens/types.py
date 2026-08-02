@@ -19,7 +19,7 @@ AttenuationCoeffs = tuple[tuple[float, float], ...]
 Mode = Literal["L", "T"]
 Modes = tuple[Mode, ...]
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Material(ABC):
     cp: float
     density: float
@@ -45,7 +45,7 @@ class Material(ABC):
             alpha += a * np.abs(frequency) ** n
         return alpha
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Fluid(Material):
     type: ClassVar[str] = "fluid"
 
@@ -55,7 +55,7 @@ class Fluid(Material):
             raise ValueError("A fluid must have cs = 0.")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Solid(Material):
     type: ClassVar[str] = "solid"
 
