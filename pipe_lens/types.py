@@ -1,7 +1,8 @@
 # built-in modules
 from abc import ABC
-from typing import Tuple, List
+from typing import Tuple, List, ClassVar, Literal
 from copy import deepcopy
+from dataclasses import dataclass
 
 # scientific-computing modules
 import numpy as np
@@ -14,144 +15,57 @@ __all__ = ["FLOAT", "Material", "Fluid", "Solid"]
 FLOAT = float64
 COMPLEX = complex128
 
+AttenuationCoeffs = tuple[tuple[float, float], ...]
+Mode = Literal["L", "T"]
+Modes = tuple[Mode, ...]
+
+@dataclass(frozen=True, slots=True)
 class Material(ABC):
-    def __init__(self, cp: float, density: float, attenuation_coeff: Tuple[Tuple[float | int, float | int], ...] = ((0., 0.), ), cs: float = 0, name: str=""):
-        if cp <= 0:
-            raise ValueError("cp (pressure wave) speed must be positive.")
-        if cs < 0:
-            raise ValueError("cs (shear wave) speed must non-negative.")
-        if density <= 0:
-            raise ValueError("Density must be positive.")
+    cp: float
+    density: float
+    attenuation_coeff: AttenuationCoeffs = ((0.0, 0.0),)
+    cs: float = 0.0
+    name: str = ""
 
-        self._cp = cp
-        self._cs = cs
-        self._density = density
-        self._acoustic_impedance = self._cp * self._density
-        self._name = name
-        self._attenuation_coeff = attenuation_coeff
-        self._type = ""
-
-    @property
-    def cp(self) -> float:
-        return self._cp
-
-    @property
-    def cs(self) -> float:
-        return self._cs
-
-    @property
-    def density(self) -> float:
-        return self._density
-
-
-    def alpha(self, frequency):
-        # based on page 113, Krautkrämer, J., & Krautkrämer, H. (2013).
-        # Ultrasonic testing of materials. Springer Science & Business Media.
-        alpha = np.ones_like(frequency)
-        for coeff_pair in self._attenuation_coeff:
-            alpha += coeff_pair[0] * np.power(np.abs(frequency), coeff_pair[1])
-        return alpha
-
+    def __post_init__(self):
+        if self.cp <= 0:
+            raise ValueError("cp must be positive.")
+        if self.cs < 0:
+            raise ValueError("cs must be non-negative.")
+        if self.density <= 0:
+            raise ValueError("density must be positive.")
 
     @property
     def acoustic_impedance(self) -> float:
-        return self._acoustic_impedance
+        return self.cp * self.density
 
-    @property
-    def name(self) -> str:
-        return self._name
+    def alpha(self, frequency: np.ndarray) -> np.ndarray:
+        alpha = np.zeros_like(frequency, dtype=float)
+        for a, n in self.attenuation_coeff:
+            alpha += a * np.abs(frequency) ** n
+        return alpha
 
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(data["cp"], data["density"], data["name"])
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self._name,
-            "type": self._type,
-            "cp": self._cp,
-            "density": self._density,
-            "cs": self._cs,
-            "alpha": self._alpha,
-        }
-
-    def __repr__(self) -> str:
-        return (f"{self.__class__.__name__}(cp={self._cp:.2f} m/s, "
-                f"density={self._density:.2f} kg/m^3, "
-                f"acoustic_impedance={self._acoustic_impedance * 1e-6:.2f} MRayl,"
-                f"attenuatino coefficient= {self._alpha:.2f} s^2 Np/m)")
-
-
-    def __eq__(self, other) -> bool:
-        return self.cp == other.cp and self.density == other.density and self.name == other.name and self.cs == other.cs and self._alpha == other._alpha
-
+@dataclass(frozen=True, slots=True)
 class Fluid(Material):
-    """
-    Classe que contém informação sobre fluidos.
+    type: ClassVar[str] = "fluid"
 
-    Parameters
-    ----------
-    cp : float
-        Velocidade da onda de pressão (longitudinal) no sólido, em m/s.
-    density : float
-        Densidade do material, em kg/m³.
-    """
-    def __init__(self, cp: float, density: float, attenuation_coeff: Tuple[Tuple[float | int, float | int], ...] = ((0., 0.),), name : str = ""):
-        super().__init__(cp, density, attenuation_coeff=attenuation_coeff, cs=0., name=name)
-        self._type = "fluid"
-
-    @property
-    def cs(self) -> float:
-        raise ValueError("Fluid does not have shear-wave velocity.")
+    def __post_init__(self):
+        super().__post_init__()
+        if self.cs != 0:
+            raise ValueError("A fluid must have cs = 0.")
 
 
+@dataclass(frozen=True, slots=True)
 class Solid(Material):
-    """
-    Classe que contém informação sobre materiais sólidos.
+    type: ClassVar[str] = "solid"
 
-    Parameters
-    ----------
-    cp : float
-        Velocidade da onda de pressão (longitudinal) no sólido, em m/s.
-    cs : float
-        Velocidade da onda de cisalhamento (transversal) no sólido, em m/s. Por padrão é metade de ``cp``.
-    density : float
-        Densidade do material, em kg/m³.
-    """
-    def __init__(self, cp: float, cs: float, density: float, attenuation_coeff: Tuple[Tuple[float | int, float | int], ...] = ((1., 0.),), name : str = ""):
-        if cs <= 0:
-            raise ValueError("cs (shear wave) speed cannot be negative.")
-        super().__init__(cp, density, cs=cs, attenuation_coeff=attenuation_coeff, name=name)
-        self._type = "solid"
-
-    @classmethod
-    def from_dict(cls, data: dict):
-        return cls(data["cp"], data["cs"], data["density"], data["name"])
+    def __post_init__(self):
+        super().__post_init__()
+        if self.cs <= 0:
+            raise ValueError("A solid must have cs > 0.")
 
 class Ray:
-    """Classe que armazena informações de um caminho de raios.
-
-    Parameters
-    ----------
-    xray: list of ndarray
-        Lista de coordenadas `x` dos pontos onde o raio interage com superfícies.
-    zray: list of ndarray
-        Lista de coordenadas `z` dos pontos onde o raio interage com superfícies.
-    ang_i: list of ndarray
-        Lista com os ângulos incidentes dos raios nas superfícies.
-    ang_t: list of ndarray
-        Lista com os ângulos transmitidos ou refletidos dos raios nas superfícies.
-    dist2focus: ndarray
-        Array 2D que representa a distância entre o último trecho do raio e o foco.
-    medoium: tuple of Material
-        Tupla com objeto tipo `Material` dos meios onda há propagação de cada trecho do raio.
-    modes: tuple of str
-        Tupla com o modo de propagação em cada trecho do raio ("L" ou "T").
-    tof: ndarray
-        Array 2D que representa o tempo de vôo do raio até o ponto final. Caso não seja fornecido, será calculado com
-        base nos modos e meios fornecidos.
-    """
-    def __init__(self, xray, zray, ang_i, ang_t, dist2focus, medium: Tuple[Material, ...], modes : Tuple[str, ...] | None = None, tof = None):
+    def __init__(self, xray, zray, ang_i, ang_t, dist2focus, medium: Tuple[Material, ...], modes : Modes | None = None, tof = None):
         self.xray = np.asarray(xray)
         self.zray = np.asarray(zray)
         self.ang_i = np.asarray(ang_i)
@@ -240,9 +154,6 @@ class Ray:
             total_time += d_i / speed
 
         return total_time
-
-    def __index__(self):
-        pass
 
 def pick_best_rays(ray1: Ray, ray2: Ray, mask: np.ndarray[bool]) -> tuple[Ray, NDArray[np.bool_]]:
     """ Compara dois objetos do tipo `Ray` com base em seu tempo de vôo, e retorna o que tiver menor tempo de vôo.
