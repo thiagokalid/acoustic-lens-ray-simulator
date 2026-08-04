@@ -87,7 +87,7 @@ class Transducer:
                     np.exp(-(omega + omega_c) ** 2 / (4 * self.a))
             )
 
-            return (self.gain * spectrum).astype(np.complex64)
+            return self.gain * (spectrum).astype(np.complex64)
         else:
             raise NotImplementedError
 

@@ -15,7 +15,7 @@ __all__ = ["FLOAT", "Material", "Fluid", "Solid"]
 FLOAT = float64
 COMPLEX = complex128
 
-AttenuationCoeffs = tuple[tuple[float, float], ...]
+AttenuationCoeffs = List[Tuple[float, float]]
 Mode = Literal["L", "T"]
 Modes = tuple[Mode, ...]
 
@@ -23,7 +23,7 @@ Modes = tuple[Mode, ...]
 class Material(ABC):
     cp: float
     density: float
-    attenuation_coeff: AttenuationCoeffs = ((0.0, 0.0),)
+    attenuation_coeff: AttenuationCoeffs = [(0.0, 0.0)],
     cs: float = 0.0
     name: str = ""
 

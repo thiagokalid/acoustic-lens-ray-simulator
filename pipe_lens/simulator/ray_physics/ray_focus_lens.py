@@ -74,13 +74,16 @@ class RayFocusThroughLens(RayLensPhysics):
         else:
             return np.ones_like(w * tof_mtx, dtype=COMPLEX)
 
-    def build_geom_spred_model_tx(self, w, ray, enabled: bool):
-        d1, d2, d3 = ray.segment_dist
-        return np.multiply(
-            # from tx towards the reflector:
-            two_media_geom_spread(d1, d2, ray.ang_i[0], ray.ang_t[0], self.c1, self.c2),
-            two_media_geom_spread(d2, d3, ray.ang_i[1], ray.ang_t[1], self.c2, self.c3)
-        )
+    def build_geom_spred_model_tx(self, w, ray, enabled):
+        if enabled:
+            d1, d2, d3 = ray.segment_dist
+            return np.multiply(
+                # from rx towards the reflector:
+                two_media_geom_spread(d1, d2, ray.ang_i[0], ray.ang_t[0], self.c1, self.c2),
+                two_media_geom_spread(d2, d3, ray.ang_i[1], ray.ang_t[1], self.c2, self.c3)
+            )
+        else:
+            return 1.
 
     def build_geom_spred_model_rx(self, w, ray, enabled):
         if enabled:
@@ -91,7 +94,7 @@ class RayFocusThroughLens(RayLensPhysics):
                 two_media_geom_spread(d2, d1, ray.ang_t[0], ray.ang_i[0], self.c2, self.c1),
             )
         else:
-            return np.ones_like(w)
+            return 1.
 
     def build_attenuation_model(self, w, ray: Ray, enabled):
         M = np.ones_like(w)
