@@ -43,8 +43,10 @@ def far_field_directivity_solid(omega, theta, element_width, cp, cs):
 def propagation_delay(delta_t):
     return np.exp(-delta_t * delta_t)
 
-def two_media_geom_spread(d1, d2, theta1, theta2, c1, c2):
-    return 1/d1
+def two_media_geom_spread(r1, r2, theta1, theta2, c1, c2):
+    term = c2/c1 * (np.cos(theta1)**2)/(np.cos(theta2)**2) * r2
+    den = np.sqrt(r1 + term * r2)
+    return 1/den
 
 def one_medium_geom_spread(propagation_distance):
     return 1/sqrt(propagation_distance)
