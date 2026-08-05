@@ -47,9 +47,9 @@ COMPUTE_EXP_RESULTS = True
 PLOT_FOR_PAPER = True
 
 # Materials related:
-steel = Solid(cp=5900, cs=3200, density=7850, attenuation_coeff=[(0., 0.)])
-aluminium = Solid(cp=6332.94, cs=3128.18, density=2730, attenuation_coeff=[(0., 0.)])
-water = Fluid(cp=1430, density=997, attenuation_coeff=[(25e-15, 2.)])
+steel = Solid(cp=5900, cs=3200, density=7850)#, attenuation_coeff=[(23.4 * 1.1513e-7, 0)])#, (5.74e-3 * 1.1513e-25, 4)])
+aluminium = Solid(cp=6332.94, cs=3128.18, density=2730)#, attenuation_coeff=[(14.4 * 1.1513e-7, 0)]) # attenuation not measured.
+water = Fluid(cp=1430, density=997)#, attenuation_coeff=[(25e-15, 2.)])
 
 # Transducer related:
 pitch = .5e-3
@@ -85,7 +85,7 @@ focus_radius = 50e-3 # not necessary if plane_wave is selected.
 
 # Define reflector positions for the PSF evaluation:
 r_scatterer = 60e-3
-theta_scatterer = np.radians(np.arange(0, 45 + 1, 1))
+theta_scatterer = np.radians(np.arange(0, 40 + 1, 1))
 
 # Configure simulation:
 loss_model = LossModel(transmission=True, transmission_diffraction=True, reception_diffraction=True, attenuation=True)
@@ -176,18 +176,19 @@ if COMPUTE_SIM_RESULTS:
         if i == 0:
             ref_amplitude = sscan_env.max()
 
-        print(f"S-scan relative max = {sscan_env.max() / ref_amplitude}")
+        # print(f"S-scan relative max = {sscan_env.max() / ref_amplitude}")
 
 
         window_corners = [
             (65e-3, theta_scatterer[i] - np.radians(8)),  # north-east
             (55e-3, theta_scatterer[i] + np.radians(8))  # south-west
         ]
-        sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], mask, _ = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False)
+        sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], mask = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False)
 
         if PLOT_SSCANS:
-            fig, axs = plt.subplots(1, 2, figsize=(LATEX_LINEWIDTH * .8 * scaling_factor, 2 * scaling_factor))
             sscan_db = np.log10(sscan_env / ref_amplitude + 1E-6)
+
+            fig, axs = plt.subplots(1, 2, figsize=(LATEX_LINEWIDTH * .8 * scaling_factor, 2 * scaling_factor))
             axs[0].imshow(sscan_db, vmin=-6, vmax=0, extent=[np.degrees(focus_alpha_min), np.degrees(focus_alpha_max), simulation.gate_end * 1e6, simulation.gate_start * 1e6],cmap="inferno", aspect='auto')
             axs[0].axhline(y=acoustic_lens.t_outer * 1e6, color='lime', ls='--', lw=1)
             axs[0].axhline(y=(acoustic_lens.t_outer + 2 * pipeline.wall_width/pipeline.material.cp) * 1e6, color='lime', ls='--', lw=1)
@@ -226,8 +227,9 @@ if COMPUTE_EXP_RESULTS:
     for i in tqdm(range(n_pos), desc="Processing experimental acquisitions"):
         data_path = project_root / "data"
         for r in range(2):
+            shot = int(np.degrees(theta_scatterer[i]))
             data_insp = file_m2k.read(str(data_path / f"lens_{delay_law_type}_1degree_v{r + 1}.m2k"), freq_transd=central_freq,
-                                      bw_transd=bw, tp_transd=pulse_type, sel_shots=int(np.degrees(theta_scatterer[i]) + 2))
+                                      bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)
             sscan = np.sum(data_insp.ascan_data[..., 0], axis=2)
             sscan_env = envelope(sscan, axis=0)
             time_grid = data_insp.time_grid[..., 0] * 1e-6
@@ -251,7 +253,7 @@ if COMPUTE_EXP_RESULTS:
                 (55e-3, theta_scatterer[i] + np.radians(8))  # south-west
             ]
 
-            exp_fwhm_w[r, i], exp_fwhm_h[r, i], exp_amplitude[r, i], mask, _ = fwhm(sscan_env, radius_span, focus_angle, window_corners)
+            exp_fwhm_w[r, i], exp_fwhm_h[r, i], exp_amplitude[r, i], mask = fwhm(sscan_env, radius_span, focus_angle, window_corners)
 
 
             if PLOT_SSCANS:
@@ -270,7 +272,6 @@ if COMPUTE_EXP_RESULTS:
                 plt.tight_layout()
                 plt.savefig(project_root / "figures" / f"sample_sscan_{np.degrees(theta_scatterer[i]):.0f}deg_exp.pdf")
                 plt.show(block=True)
-#%%
     std_exp_amplitude = np.std(exp_amplitude, axis=0)
     std_exp_fwhm_w = np.std(exp_fwhm_w, axis=0)
     std_exp_fwhm_h = np.std(exp_fwhm_h, axis=0)
@@ -281,9 +282,7 @@ if COMPUTE_EXP_RESULTS:
 
 
 #%%
-
 if COMPUTE_EXP_RESULTS and COMPUTE_SIM_RESULTS:
-    # else:
     fig, ax = plt.subplots(figsize=(LATEX_LINEWIDTH * .4 * scaling_factor, 2 * scaling_factor))
     if not PLOT_FOR_PAPER:
         plt.suptitle("Resolution measured by considering punctual reflector.")
@@ -316,7 +315,7 @@ if COMPUTE_EXP_RESULTS and COMPUTE_SIM_RESULTS:
     plt.savefig(project_root / "figures" / "fwhm_horizontal_vs_angle.pdf")
     plt.show()
 
-    #%% FWHM Vertical:
+    # FWHM Vertical:
     fig, ax = plt.subplots(figsize=(LATEX_LINEWIDTH * .4 * scaling_factor, 2 * scaling_factor))
     if not PLOT_FOR_PAPER:
         plt.suptitle("Resolution measured by considering punctual reflector.")
@@ -344,8 +343,6 @@ if COMPUTE_EXP_RESULTS and COMPUTE_SIM_RESULTS:
     plt.tight_layout()
     plt.savefig(project_root / "figures" / "fwhm_vertical_vs_angle.pdf")
     plt.show()
-
-    #%%
 
     fig, ax = plt.subplots(figsize=(LATEX_LINEWIDTH * .4 * scaling_factor, 2 * scaling_factor))
 

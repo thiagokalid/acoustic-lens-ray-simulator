@@ -2,7 +2,7 @@
 from abc import ABC
 from typing import Tuple, List, ClassVar, Literal
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # scientific-computing modules
 import numpy as np
@@ -23,7 +23,7 @@ Modes = tuple[Mode, ...]
 class Material(ABC):
     cp: float
     density: float
-    attenuation_coeff: AttenuationCoeffs = [(0.0, 0.0)],
+    attenuation_coeff: AttenuationCoeffs = field(default_factory=lambda: [(0.0, 0.0)])
     cs: float = 0.0
     name: str = ""
 

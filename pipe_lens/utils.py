@@ -4,10 +4,9 @@ import json
 import pathlib
 
 __all__ = [
-    'api_func',
-    'api_polar',
     'fwhm',
     'convert_corners_time2idx',
+    'convert_parameters'
 ]
 
 def convert_time2radius(tspan, t_outer, t_inner, cl_surf, cl_upper, cl_bottom=None, outer_r=70):
@@ -107,16 +106,16 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
     estimated_width = pixels_coords[pixels_above_threshold, 0].max() - pixels_coords[pixels_above_threshold, 0].min()
     estimated_height = pixels_coords[pixels_above_threshold, 1].max() - pixels_coords[pixels_above_threshold, 1].min()
 
-    cnr_ang_beg, cnr_ang_end = np.argmin(np.power(theta_deg_span + 10, 2)), np.argmin(np.power(theta_deg_span + 4, 2))
-    cnr_radius_beg, cnr_radius_end = np.argmin(np.power(r_span - corners_in[0][0], 2)), np.argmin(np.power(r_span - corners_in[1][0], 2))
-
-    Ib = sscan[cnr_radius_beg:cnr_radius_end, cnr_ang_beg:cnr_ang_end]
-    Is = sscan[pixels_above_threshold]
-
-    Is_mean = np.mean(Is)
-    Ib_mean = np.mean(Ib)
-    sigma_b = np.std(Ib)
-    cnr = np.abs(Is_mean - Ib_mean) / sigma_b
+    # cnr_ang_beg, cnr_ang_end = np.argmin(np.power(theta_deg_span + 10, 2)), np.argmin(np.power(theta_deg_span + 4, 2))
+    # cnr_radius_beg, cnr_radius_end = np.argmin(np.power(r_span - corners_in[0][0], 2)), np.argmin(np.power(r_span - corners_in[1][0], 2))
+    #
+    # Ib = sscan[cnr_radius_beg:cnr_radius_end, cnr_ang_beg:cnr_ang_end]
+    # Is = sscan[pixels_above_threshold]
+    #
+    # Is_mean = np.mean(Is)
+    # Ib_mean = np.mean(Ib)
+    # sigma_b = np.std(Ib)
+    # cnr = np.abs(Is_mean - Ib_mean) / sigma_b
 
     if drawSquare:
         width = 2
@@ -133,7 +132,7 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
         pixels_above_threshold[south_west_corner[0] - width * scale_factor: south_west_corner[0] + width * scale_factor,
         north_east_corner[1] - width: south_west_corner[1] + width] = 1
 
-    return estimated_width, estimated_height, maximumAmplitude, pixels_above_threshold, cnr
+    return estimated_width, estimated_height, maximumAmplitude, pixels_above_threshold
 
 def lin_interp(x, y, i, half):
     return x[i] + (x[i+1] - x[i]) * ((half - y[i]) / (y[i+1] - y[i]))
