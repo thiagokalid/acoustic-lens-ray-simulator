@@ -11,7 +11,7 @@ from scipy.optimize import minimize
 from pipe_lens.simulator.ray_physics.ray_lens_physics import RayLensPhysics
 from pipe_lens.types import Fluid, Solid, Ray
 from pipe_lens.simulator.ray_physics.utils import snell, uhp, roots_bhaskara
-from pipe_lens.simulator.bulkwave_physics import far_field_directivity_solid
+from pipe_lens.simulator.bulkwave_physics import far_field_directivity_solid, two_media_geom_spread
 from pipe_lens.simulator.bulkwave_physics import compute_tension_transmission_coefficient, compute_tension_reflection_coefficient
 
 __all__ = ['RayOnewayThroughLens']
@@ -42,7 +42,11 @@ class RayOnewayThroughLens(RayLensPhysics):
         for tx in range(n_elem):
             # transmission coefficient:
             T1 = self.build_transmission_model(w, rays[tx], self.loss_model.transmission)
-            Ta[:, tx] *= P[:, tx] * T1 * C1[:, tx] * M[:, tx]
+
+            #
+            G = self.build_geometric_spreading(w, rays[tx], self.loss_model.attenuation)
+
+            Ta[:, tx] *= P[:, tx] * T1 * C1[:, tx] * M[:, tx] * G
 
         return Ta
 
@@ -55,6 +59,18 @@ class RayOnewayThroughLens(RayLensPhysics):
             return 1/np.sqrt(d_i)
         else:
             return np.ones(shape=(w.shape[0], self.transducer.num_elem), dtype=np.complex64)
+
+    def build_geometric_spreading(self, w, ray: Ray, enabled: bool):
+        if enabled:
+            d1, d2, d3 = ray.segment_dist
+            return np.multiply(
+                # from the reflector towards the rx:
+                two_media_geom_spread(d1, d2, ray.ang_i[0], ray.ang_t[0], self.c1, self.c2),
+                two_media_geom_spread(d2, d3, ray.ang_i[1], ray.ang_t[1], self.c2, self.c3),
+            )
+        else:
+            return 1.
+
 
     def build_transmission_model(self, w, rays: Ray, enabled: bool):
         if enabled:

@@ -2,7 +2,7 @@ import numpy as np
 
 import json
 import pathlib
-
+from scipy.ndimage import binary_erosion, binary_dilation
 __all__ = [
     'fwhm',
     'convert_corners_time2idx',
@@ -49,9 +49,17 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
 
     # Creates a binary image where only pixels above thesh_db are highlighted
     pixels_above_threshold_within_roi = img_cropped >= maximumAmplitude * 10 ** (thresh / 20)
+
+    # Morphological opening: erosion → dilation
+    # pixels_above_threshold_within_roi = binary_dilation(
+    #     binary_erosion(pixels_above_threshold_within_roi)
+    # )
+
     pixels_above_threshold = np.zeros_like(sscan, dtype=bool)
-    pixels_above_threshold[north_east_corner[0]:south_west_corner[0],
-    north_east_corner[1]:south_west_corner[1]] += pixels_above_threshold_within_roi
+    pixels_above_threshold[
+        north_east_corner[0]:south_west_corner[0],
+        north_east_corner[1]:south_west_corner[1]
+    ] = pixels_above_threshold_within_roi
 
     if np.any(pixels_above_threshold == True):
         maxLocationWithinROI = np.where(img_cropped == maximumAmplitude)
@@ -78,17 +86,16 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
 
     pixels_area = np.zeros_like(sscan)
     pixels_coords = np.zeros(shape=(*sscan.shape, 2))
-    pixels_coords_2 = np.zeros_like(pixels_coords)
     for i in range(sscan.shape[0]):
         for j in range(sscan.shape[1]):
-            inner_radius = r_borders[i]
-            outer_radius = r_borders[i + 1]
+            inner_radius = r_borders[i + 1]
+            outer_radius = r_borders[i]
             theta1 = theta_borders[j]
             theta2 = theta_borders[j + 1]
             diff_theta = np.abs(theta2 - theta1)
 
             #
-            pixels_area[i, j] = (outer_radius * 2 - inner_radius * 2) * np.pi * diff_theta / 360
+            pixels_area[i, j] = (outer_radius ** 2 - inner_radius ** 2) * diff_theta / 2
 
             pixel_radius = (outer_radius + inner_radius) / 2
             pixel_ang = (theta1 + theta2) / 2
@@ -117,6 +124,8 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
     # sigma_b = np.std(Ib)
     # cnr = np.abs(Is_mean - Ib_mean) / sigma_b
 
+    flaw_area = np.sum(pixels_area[pixels_above_threshold])
+
     if drawSquare:
         width = 2
         scale_factor = int(sscan.shape[0] / sscan.shape[1])
@@ -132,7 +141,7 @@ def fwhm(sscan, r_span, theta_deg_span, corners_in, thresh=-6, drawSquare=True, 
         pixels_above_threshold[south_west_corner[0] - width * scale_factor: south_west_corner[0] + width * scale_factor,
         north_east_corner[1] - width: south_west_corner[1] + width] = 1
 
-    return estimated_width, estimated_height, maximumAmplitude, pixels_above_threshold
+    return estimated_width, estimated_height, maximumAmplitude, pixels_above_threshold, flaw_area
 
 def lin_interp(x, y, i, half):
     return x[i] + (x[i+1] - x[i]) * ((half - y[i]) / (y[i+1] - y[i]))

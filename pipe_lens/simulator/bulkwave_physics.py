@@ -31,12 +31,20 @@ def directivity_longitudinal_wave(theta, cp, cs):
     return numerator / denominator
 
 
-def far_field_directivity_solid(omega, theta, element_width, cp, cs):
+def far_field_directivity_solid(omega, theta, element_width, cp, cs, baffle_type="soft"):
     lambda_w = 2 * np.pi * cp / omega
     Df = np.nan_to_num(far_field_directivity(theta, element_width, lambda_w), copy=True, nan=1.)
     DL = np.nan_to_num(directivity_longitudinal_wave(theta, cp, cs), copy=True, nan=1.)
-    return Df * DL
+    return Df * DL * compute_baffling(theta, baffle_type)
 
+def compute_baffling(theta, baffle_type):
+    match baffle_type:
+        case "rigid":
+            return np.ones_like(theta)
+        case "soft":
+            return np.cos(theta)
+        case _:
+            raise ValueError("Invalid baffle type.")
 
 # Propagation related phenomena:
 
@@ -44,7 +52,7 @@ def propagation_delay(delta_t):
     return np.exp(-delta_t * delta_t)
 
 def two_media_geom_spread(r1, r2, theta1, theta2, c1, c2):
-    term = c2/c1 * (np.cos(theta1)**2)/(np.cos(theta2)**2) * r2
+    term = c2/c1 * (np.cos(theta1)**2)/(np.cos(theta2)**2)
     den = np.sqrt(r1 + term * r2)
     return 1/den
 
@@ -59,7 +67,6 @@ def compute_attenuation(omega, medium, distance):
 def compute_ray_attenuation(omega: np.ndarray, ray: Ray) -> NDArray[np.float32]:
     segmentwise_attenuation = [compute_attenuation(omega, medium, segment) for segment, medium in zip(ray.segment_dist, ray.medium)]
     return np.prod(np.asarray(segmentwise_attenuation), axis=0)
-
 
 # Transmission related phenomena:
 

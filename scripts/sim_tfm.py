@@ -133,7 +133,6 @@ if __name__ == "__main__":
     for tx in range(n_elem):
         for rx in range(n_elem):
             tof_total = np.round(tofs[:, tx, rx] * simulation.fs).astype(np.int64)
-
             tof_corrected = (tof_total - simulation.gate_start * simulation.fs).astype(np.int64)
 
             valid = tof_total - simulation.gate_start * simulation.fs < simulation.gate_samples
