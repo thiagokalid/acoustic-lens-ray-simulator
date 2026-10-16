@@ -39,8 +39,11 @@ LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
 FIGSIZE = (4, 3)
 CROPPED_SSCAN_FIGSIZE = (2, 2)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FIGS_PATH = PROJECT_ROOT / "figures"
-COMPUTE_SIM_RESULTS = False
+FIGS_PATH = PROJECT_ROOT / "figures" / "fig8"
+if not FIGS_PATH.exists():
+    FIGS_PATH.mkdir(parents=True)
+DATA_PATH = PROJECT_ROOT / "data" / "experiment_1"
+COMPUTE_SIM_RESULTS = True
 COMPUTE_EXP_RESULTS = True
 SAVE_FIGS = True
 
@@ -57,12 +60,12 @@ def plot_sscan(sscan_db, tbeg, tend):
     ax.set_xticks(np.arange(-45, 45 + 15, 15))
 
     # Subfig pequena
-    ax.set_ylim([62.6, 54.5])
+    ax.set_ylim([60.0, 52.19])
 
     plt.tight_layout()
     if SAVE_FIGS:
-        plt.savefig(PROJECT_ROOT / "figures" / f"sscan_{delay_law_type}_full.pdf", bbox_inches='tight')
-        plt.show(block=True)
+        plt.savefig(FIGS_PATH / f"sscan_{delay_law_type}_full.pdf", bbox_inches='tight')
+        plt.close()
     else:
         plt.show(block=True)
 
@@ -79,10 +82,23 @@ def plot_cropped(sscan, tbeg: float, tend: float, tbeg_crop: float, tend_crop: f
     plt.tight_layout()
 
     if SAVE_FIGS:
-        fig_path = FIGS_PATH / f"{inspection_type}_windowed_sscans_{delay_law_type}"
-        fig_path.mkdir(parents=True, exist_ok=True)
-        figname = f"sscan_{delay_law_type}_windowed_{np.degrees(angle_rad):.0f}.png"
-        plt.savefig(fig_path / figname, bbox_inches='tight', dpi=300)
+        fig_name = f"windowed_sscan_angle_{np.degrees(angle_rad):.1f}.png"
+
+        if delay_law_type == "focused_wave" and inspection_type == "simulated":
+            subfolder = '1st_column'
+        elif delay_law_type == "plane_wave" and inspection_type == "simulated":
+            subfolder = '2nd_column'
+        elif delay_law_type == "focused_wave" and inspection_type == "experimental":
+            subfolder = '3rd_column'
+        else:
+            subfolder = '4th_column'
+
+        fig_path = FIGS_PATH / subfolder
+        if not fig_path.exists():
+            fig_path.mkdir(parents=True)
+
+        plt.savefig(fig_path / fig_name, bbox_inches='tight', dpi=300)
+        plt.close()
     else:
         plt.show(block=True)
 
@@ -229,44 +245,36 @@ if __name__ == "__main__":
     if COMPUTE_EXP_RESULTS:
         from framework import file_m2k
 
-        n_reps = 2
-        exp_amplitude = np.zeros(shape=(n_reps, num_reflectors))
-        exp_fwhm_w = np.zeros(shape=(n_reps, num_reflectors))
-        exp_fwhm_h = np.zeros(shape=(n_reps, num_reflectors))
-
         for delay_law_type in ["focused_wave", "plane_wave"]:
-            data_path = PROJECT_ROOT / "data"
-            if delay_law_type == "plane_wave":
-                data_ref = file_m2k.read(str(data_path / f"ref_PW_w_tube.m2k"), freq_transd=central_freq, bw_transd=bw, tp_transd=pulse_type)
-            else:
-                data_ref = file_m2k.read(str(data_path / f"ref.m2k"), freq_transd=central_freq, bw_transd=bw,
-                                         tp_transd=pulse_type)
+            inspection_index = 1 if delay_law_type == "focused_wave" else 2
+
+            # Read the reference signal (without pipe):
+            data_ref = file_m2k.read(str(DATA_PATH / f"ref.m2k"), freq_transd=central_freq, bw_transd=bw,
+                                     tp_transd=pulse_type)[inspection_index]
+            channels_ref = np.mean(data_ref.ascan_data, axis=-1)
 
             for i in tqdm(range(num_reflectors), desc="Processing experimental acquisitions"):
-                if delay_law_type == "plane_wave":
-                    shot = int(np.degrees(reflector_angular_position[i])) + 2
-                    data_insp = file_m2k.read(str(data_path / f"API_XL_1grau_PW_v1.m2k"), freq_transd=central_freq,
-                                               bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)
-                    sscan = np.sum(data_insp.ascan_data[..., 0], axis=2)[:, ::-1, ...]
-                else:
-                    shot = int(np.degrees(reflector_angular_position[i]))
-                    data_insp = file_m2k.read(str(data_path / f"API_XL_1grau_v1.m2k"), freq_transd=central_freq,
-                                               bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)
+                theta_scatterer = reflector_angular_position[i]
+                shot = int(np.degrees(theta_scatterer))
 
-                    sscan = np.sum(data_insp.ascan_data[..., 0], axis=2)[:, :, ...]
+                data_insp = file_m2k.read(str(DATA_PATH / f"psf_v1.m2k"),
+                                          freq_transd=central_freq, bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)[inspection_index]
+                channels = data_insp.ascan_data[..., 0]
+
+                sscan = np.sum(channels - channels_ref, axis=2)
 
 
                 sscan_env = envelope(sscan, axis=0)
                 time_grid = data_insp.time_grid[..., 0] * 1e-6
                 time_shift = -1.5e-6
 
-                theta_scatterer = reflector_angular_position[i]
+
 
                 if delay_law_type == "plane_wave":
-                    tbeg_crop = 58.0e-6
+                    tbeg_crop = 55.54e-6
                     tend_crop = tbeg_crop + 1.8e-6
                 else:
-                    tbeg_crop = 58.0e-6
+                    tbeg_crop = 55.54e-6
                     tend_crop = tbeg_crop + 1.8e-6
 
                 if i == 0:
