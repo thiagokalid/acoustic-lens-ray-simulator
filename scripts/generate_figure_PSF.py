@@ -123,7 +123,7 @@ ax.set_ylabel(r"Width / (degrees)")
 
 ax.grid()
 plt.tight_layout()
-plt.savefig(project_root/ "figures"/ "api_fwhm_horizontal.pdf")
+plt.savefig(project_root/ "figures"/ "psf_fwhm_horizontal.pdf")
 plt.show()
 
 #%%%
@@ -144,7 +144,7 @@ ax.set_ylabel(r"Height / (mm)")
 ax.grid()
 plt.tight_layout()
 
-plt.savefig(project_root/ "figures"/ "api_fwhm_vertical.pdf")
+plt.savefig(project_root/ "figures"/ "psf_fwhm_vertical.pdf")
 plt.show()
 
 
@@ -169,5 +169,5 @@ ax.set_ylabel(r"Normalized Amplitude / (%)")
 
 ax.grid()
 plt.tight_layout()
-plt.savefig(project_root/ "figures"/ "api_fwhm_amplitude.pdf")
+plt.savefig(project_root/ "figures"/ "psf_normalized_amplitude.pdf")
 plt.show()

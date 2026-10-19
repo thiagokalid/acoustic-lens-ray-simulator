@@ -53,14 +53,14 @@ def plot_sscan(sscan_db, tbeg, tend):
 
 
     extent = (np.degrees(focus_alpha_min), np.degrees(focus_alpha_max), tend * 1e6, tbeg * 1e6)
-    im = ax.imshow(sscan_db, vmin=0, vmax=1, extent=extent, cmap="YlGnBu", aspect='auto')
+    im = ax.imshow(sscan_db, vmin=0, vmax=1.0, extent=extent, cmap="YlGnBu", aspect='auto')
 
     ax.set_xlabel("Angular position / (degrees)")
     ax.set_ylabel(r"Time / $\mathrm{(\mu s)}$")
     ax.set_xticks(np.arange(-45, 45 + 15, 15))
 
     # Subfig pequena
-    ax.set_ylim([60.0, 52.19])
+    ax.set_ylim([62.0, 54.19])
 
     plt.tight_layout()
     if SAVE_FIGS:
@@ -271,10 +271,10 @@ if __name__ == "__main__":
 
 
                 if delay_law_type == "plane_wave":
-                    tbeg_crop = 55.54e-6
+                    tbeg_crop = 58.06e-6 - 1.8e-6 / 2
                     tend_crop = tbeg_crop + 1.8e-6
                 else:
-                    tbeg_crop = 55.54e-6
+                    tbeg_crop = 57.45e-6
                     tend_crop = tbeg_crop + 1.8e-6
 
                 if i == 0:
@@ -286,7 +286,7 @@ if __name__ == "__main__":
 
                 sscan_db = np.log10(sscan_env / ref_amplitude + 1E-6)
 
-                if i == 0:
+                if i == 0 and delay_law_type == "focused_wave":
                     plot_sscan(sscan_env / ref_amplitude, tbeg=time_grid[0], tend=time_grid[-1])
 
 

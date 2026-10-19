@@ -14,8 +14,6 @@ rcParams.update({
 import matplotlib
 matplotlib.use("TkAgg")
 
-LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
-
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 
@@ -42,41 +40,18 @@ import os
 import time
 
 # Constants:
-LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
-cm = 1 / 2.54
-FIGSIZE = (7 * cm, 6 * cm)
-CROPPED_SSCAN_FIGSIZE = (2, 2)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-FIGS_PATH = PROJECT_ROOT / "figures"
 DATA_PATH = PROJECT_ROOT / "data" / "experiment_1"
-COMPUTE_SIM_RESULTS = False
-COMPUTE_EXP_RESULTS = True
-SAVE_FIGS = True
+COMPUTE_SIM_RESULTS = True
+COMPUTE_EXP_RESULTS = False
+FWHM_THRESHOLD_DB = -6
 
-def plot_experimental_data(ax, thetas, mean_values, std_values, color='k', style='o-', label="_"):
-    ax.plot(thetas, mean_values, style, color=color, lw=1, ms=2.25, label=label)
-    ax.fill_between(
-        x=thetas,
-        y1=mean_values + std_values,
-        y2=mean_values - std_values,
-        alpha=.25, color=color
-    )
-
-    ax.set_xticks(np.arange(0, 40 + 5, 5))
-
-def simulate_single_scatterer(xreflector, zreflector, simulation, raytracer, delay_law, radius_span, focus_angle):
-    theta_scatterer = np.arctan2(xreflector, zreflector)
+def simulate_single_scatterer(xreflector, zreflector, simulation, delay_law):
     fmc = simulation.simulate_scatterer(
         xf=xreflector,
         zf=zreflector
     )
     delay_law_in_shifts = np.round(delay_law * simulation.fs).astype(np.int32)
-
-    optimal_ray = raytracer.solve(
-        xf=xreflector,
-        zf=zreflector
-    )
-    distances = np.asarray([ray.compute_dist() for ray in optimal_ray])
 
     # assuming linearity, we create an s-scan from the fmc based on the emission and reception delay-law
     sscan = fmc2sscan_numba(
@@ -85,18 +60,7 @@ def simulate_single_scatterer(xreflector, zreflector, simulation, raytracer, del
         shifts_r=delay_law_in_shifts
     )[..., np.newaxis]
 
-    sscan_env = envelope(sscan, axis=0)[..., 0]
-
-    # print(f"S-scan relative max = {sscan_env.max() / ref_amplitude}")
-
-    window_corners = [
-        (70e-3, theta_scatterer - np.radians(14)),  # north-east
-        (45e-3, theta_scatterer + np.radians(14))  # south-west
-    ]
-    fwhm_w, fwhm_h, amplitude, mask, api = fwhm(sscan_env, radius_span, focus_angle, window_corners,
-                                                                drawSquare=False)
-
-    return fwhm_w, fwhm_h, amplitude, sscan, mask, api
+    return sscan
 
 def generate_focal_law(delay_law_type, focus_radius, focus_angle, acoustic_lens, pipeline, transducer):
     if delay_law_type == "focused_wave":
@@ -159,7 +123,6 @@ if __name__ == "__main__":
 
 
     # Delay-law related:
-    delay_law_type = "focused_wave"  # "focused_wave" or "plane_wave"
     focus_alpha_step = np.radians(.5)
     focus_alpha_max= np.radians(45)
     focus_alpha_min = np.radians(-45)
@@ -195,55 +158,64 @@ if __name__ == "__main__":
     raytracer = RaytracerScenario(physics, optimizer)
     simulation = Simulator(gate_start=40e-6, gate_end=80e-6, fs=62.5e6, raytracer=raytracer)
 
+
     if COMPUTE_SIM_RESULTS:
-        delay_law = generate_focal_law(delay_law_type, focus_radius, focus_angle, acoustic_lens, pipeline, transducer)
+        for delay_law_type in ["focused_wave", "plane_wave"]:
+            delay_law = generate_focal_law(delay_law_type, focus_radius, focus_angle, acoustic_lens, pipeline, transducer)
 
-        # Conver the time-axix to radius:
-        radius_span = convert_time2radius(
-            tspan=simulation.tspan,
-            t_outer=acoustic_lens.t_outer,
-            t_inner=acoustic_lens.t_outer + 2 * pipeline.wall_width/pipeline.material.cp,
-            cl_surf=pipeline.material.cp,
-            cl_upper=acoustic_lens.coupling_medium.cp,
-            cl_bottom=acoustic_lens.coupling_medium.cp,
-            outer_r=pipeline.outer_radius
-        )
+            # Conver the time-axix to radius:
+            radius_span = convert_time2radius(
+                tspan=simulation.tspan,
+                t_outer=acoustic_lens.t_outer,
+                t_inner=acoustic_lens.t_outer + 2 * pipeline.wall_width/pipeline.material.cp,
+                cl_surf=pipeline.material.cp,
+                cl_upper=acoustic_lens.coupling_medium.cp,
+                cl_bottom=acoustic_lens.coupling_medium.cp,
+                outer_r=pipeline.outer_radius
+            )
 
-        x_scatterer, z_scatterer = r_scatterer * np.sin(theta_scatterer), r_scatterer * np.cos(theta_scatterer)
+            x_scatterer, z_scatterer = r_scatterer * np.sin(theta_scatterer), r_scatterer * np.cos(theta_scatterer)
 
-        sim_amplitude = np.zeros(shape=(len(theta_scatterer)))
-        sim_fwhm_w = np.zeros(shape=(len(theta_scatterer)))
-        sim_fwhm_h = np.zeros(shape=(len(theta_scatterer)))
-
-
-
-        process = psutil.Process(os.getpid())
-
-        runtime = []
-        memory_usage = []
-
-        for i in tqdm(range(len(theta_scatterer)), desc="Running simulations"):
-            start_time = time.perf_counter()
-
-            sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], sscan, mask, _ = simulate_single_scatterer(
-                x_scatterer[i], z_scatterer[i], simulation, raytracer, delay_law, radius_span, focus_angle)
-            sscan_env = envelope(sscan, axis=0)[..., 0]
-
-            # Runtime of this iteration
-            elapsed_time = time.perf_counter() - start_time
-            runtime.append(elapsed_time)
-
-            # RAM currently used by this Python process
-            memory_usage.append(process.memory_info().rss / 1024 ** 2)  # MB
-
-            time_shift = 0
+            sim_amplitude = np.zeros(shape=(len(theta_scatterer)))
+            sim_fwhm_w = np.zeros(shape=(len(theta_scatterer)))
+            sim_fwhm_h = np.zeros(shape=(len(theta_scatterer)))
 
 
-        print("Average runtime per iteration: ", np.mean(runtime))
-        print("Average memory usage per iteration: ", np.mean(memory_usage))
-        np.save(project_root / "results" / f"sim_amplitude_{delay_law_type}.npy", sim_amplitude)
-        np.save(project_root / "results" / f"sim_fwhm_w_{delay_law_type}.npy", sim_fwhm_w)
-        np.save(project_root / "results" / f"sim_fwhm_h_{delay_law_type}.npy", sim_fwhm_h)
+
+            process = psutil.Process(os.getpid())
+
+            runtime = []
+            memory_usage = []
+
+            for i in tqdm(range(len(theta_scatterer)), desc="Running simulations"):
+                start_time = time.perf_counter()
+
+                sscan = simulate_single_scatterer(x_scatterer[i], z_scatterer[i], simulation, delay_law)
+                sscan_env = envelope(sscan, axis=0)[..., 0]
+
+                window_corners = [
+                    (70e-3, theta_scatterer[i] - np.radians(14)),  # north-east
+                    (45e-3, theta_scatterer[i] + np.radians(14))  # south-west
+                ]
+
+                sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], mask, flaw_area = fwhm(sscan_env, radius_span, focus_angle, window_corners,
+                                                            drawSquare=False, thresh=FWHM_THRESHOLD_DB)
+
+                # Runtime of this iteration
+                elapsed_time = time.perf_counter() - start_time
+                runtime.append(elapsed_time)
+
+                # RAM currently used by this Python process
+                memory_usage.append(process.memory_info().rss / 1024 ** 2)  # MB
+
+                time_shift = 0
+
+
+            print("Average runtime per iteration: ", np.mean(runtime))
+            print("Average memory usage per iteration: ", np.mean(memory_usage))
+            np.save(project_root / "results" / f"sim_amplitude_{delay_law_type}.npy", sim_amplitude)
+            np.save(project_root / "results" / f"sim_fwhm_w_{delay_law_type}.npy", sim_fwhm_w)
+            np.save(project_root / "results" / f"sim_fwhm_h_{delay_law_type}.npy", sim_fwhm_h)
 
     #%% Compute the **Experimental** results:
     if COMPUTE_EXP_RESULTS:
@@ -266,6 +238,7 @@ if __name__ == "__main__":
 
 
             for i in tqdm(range(n_pos), desc="Processing experimental acquisitions"):
+                CNRs = np.zeros(n_reps, dtype=np.float64)
                 for rep in range(n_reps):
                     shot = int(np.degrees(theta_scatterer[i]))
 
@@ -273,7 +246,6 @@ if __name__ == "__main__":
                     data_insp = file_m2k.read(str(DATA_PATH / f"psf_v{rep + 1}.m2k"), freq_transd=central_freq,
                                               bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)[inspection_index]
                     channels = data_insp.ascan_data[..., 0]
-
                     sscan = np.sum(channels - channels_ref, axis=2)
 
                     sscan_env = envelope(sscan, axis=0)
@@ -282,8 +254,8 @@ if __name__ == "__main__":
                     if delay_law_type == "focused_wave":
                         radius_span = convert_time2radius(
                             tspan=time_grid,
-                            t_outer=53.4e-6,
-                            t_inner=58.9e-6,
+                            t_outer=54.74e-6,
+                            t_inner=60.49e-6,
                             cl_surf=pipeline.material.cp,
                             cl_upper=acoustic_lens.coupling_medium.cp,
                             cl_bottom=acoustic_lens.coupling_medium.cp,
@@ -292,8 +264,8 @@ if __name__ == "__main__":
                     else:
                         radius_span = convert_time2radius(
                             tspan=time_grid,
-                            t_outer=53.12e-6,
-                            t_inner=58.7e-6,
+                            t_outer=54.74e-6,
+                            t_inner=60.49e-6,
                             cl_surf=pipeline.material.cp,
                             cl_upper=acoustic_lens.coupling_medium.cp,
                             cl_bottom=acoustic_lens.coupling_medium.cp,
@@ -301,42 +273,46 @@ if __name__ == "__main__":
                         )
 
                     window_corners = [
-                        (63.0e-3, theta_scatterer[i] - np.radians(10)),  # north-east
-                        (57e-3, theta_scatterer[i] + np.radians(20))  # south-west
+                        (64.0e-3, theta_scatterer[i] - np.radians(10)),  # north-east
+                        (57.0e-3, theta_scatterer[i] + np.radians(20))  # south-west
                     ]
 
-                    exp_fwhm_w[rep, i], exp_fwhm_h[rep, i], exp_amplitude[rep, i], mask, _ = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False,)
+                    exp_fwhm_w[rep, i], exp_fwhm_h[rep, i], exp_amplitude[rep, i], mask, _ = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False, thresh=FWHM_THRESHOLD_DB)
 
+
+                    row_beg, row_end = np.searchsorted(radius_span[::-1], 57e-3), np.searchsorted(radius_span[::-1], 62e-3)
+                    col_beg, col_end = np.searchsorted(focus_angle, np.radians(-35)), np.searchsorted(focus_angle, np.radians(-15))
+                    row_beg = len(radius_span) - row_beg
+                    row_end = len(radius_span) - row_end
+
+                    sscan_signal = np.copy(sscan_env)
+                    sscan_signal[~mask] = np.nan
+
+                    noise_mask = np.zeros_like(sscan_env, dtype=bool)
+                    noise_mask[row_end:row_beg, col_beg:col_end] = True
+
+                    signal_mean = np.nanmean(sscan_signal)
+                    noise_mean = np.nanmean(sscan_env[noise_mask])
+                    noise_std = np.nanstd(sscan_env[noise_mask])
+
+                    noise_signal = np.copy(sscan_env)
+                    noise_signal[~noise_mask] = np.nan
                     if theta_scatterer[i] == np.degrees(0) and rep == 0:
-                        row_beg, row_end = np.searchsorted(radius_span[::-1], 57e-3), np.searchsorted(radius_span[::-1], 62e-3)
-                        col_beg, col_end = np.searchsorted(focus_angle, np.radians(-35)), np.searchsorted(focus_angle, np.radians(-15))
-                        row_beg = len(radius_span) - row_beg
-                        row_end = len(radius_span) - row_end
-
-                        sscan_signal = np.copy(sscan_env)
-                        sscan_signal[~mask] = np.nan
-
-                        noise_mask = np.zeros_like(sscan_env, dtype=bool)
-                        noise_mask[row_end:row_beg, col_beg:col_end] = True
-
-                        signal_mean = np.nanmean(sscan_signal)
-                        noise_mean = np.nanmean(sscan_env[noise_mask])
-                        noise_std = np.nanstd(sscan_env[noise_mask])
-
-                        noise_signal = np.copy(sscan_env)
-                        noise_signal[~noise_mask] = np.nan
-
                         extent = (np.degrees(focus_angle[0]), np.degrees(focus_angle[-1]), time_grid[-1] * 1e6, time_grid[0] * 1e6)
 
                         fig, axs = plt.subplots(nrows=1, ncols=3)
+                        manager = plt.get_current_fig_manager()
+                        manager.full_screen_toggle()
+
                         axs[0].imshow(sscan_env, extent=extent, aspect='auto', interpolation='none')
-                        axs[1].imshow(sscan_signal, extent=extent, aspect='auto', interpolation='none')
+                        axs[1].imshow(mask, extent=extent, aspect='auto', interpolation='none')
                         axs[1].axvline(np.degrees(theta_scatterer[i]), ls='--', lw=.5, color='r')
 
                         axs[2].imshow(noise_signal, extent=extent, aspect='auto', interpolation='none')
                         plt.show(block=False)
-
-                        print(f"CNR = {20 * np.log10(np.abs(signal_mean - noise_mean) / noise_std):.2f} dB")
+                    CNRs[rep] = 20 * np.log10(np.abs(signal_mean - noise_mean) / noise_std)
+                print(f"CNR mean = {np.mean(CNRs)} dB")
+                print(f"CNR std = {np.std(CNRs)} dB")
 
             std_exp_amplitude = np.std(exp_amplitude, axis=0)
             std_exp_fwhm_w = np.std(exp_fwhm_w, axis=0)
@@ -352,113 +328,3 @@ if __name__ == "__main__":
             np.save(project_root / "results" / f"std_exp_amplitude_{delay_law_type}.npy", std_exp_amplitude)
             np.save(project_root / "results" / f"std_exp_fwhm_w_{delay_law_type}.npy", std_exp_fwhm_w)
             np.save(project_root / "results" / f"std_exp_fwhm_h_{delay_law_type}.npy", std_exp_fwhm_h)
-
-    #%%
-    #
-    # exp_amplitude_maximum = np.max([
-    #     mean_exp_amplitude_focused_wave,
-    #     mean_exp_amplitude_plane_wave
-    # ])
-    #
-    # sim_amplitude_maximum = np.max([
-    #     sim_amplitude_plane_wave, sim_amplitude_focused_wave
-    # ])
-    #
-    # # Transform horizontal fwhm to degrees:
-    # sim_fwhm_w_plane_wave = np.degrees(sim_fwhm_w_plane_wave)
-    # sim_fwhm_w_focused_wave = np.degrees(sim_fwhm_w_focused_wave)
-    # mean_exp_fwhm_w_plane_wave = np.degrees(mean_exp_fwhm_w_plane_wave)
-    # std_exp_fwhm_w_plane_wave = np.degrees(std_exp_fwhm_w_plane_wave)
-    # mean_exp_fwhm_w_focused_wave = np.degrees(mean_exp_fwhm_w_focused_wave)
-    # std_exp_fwhm_w_focused_wave = np.degrees(std_exp_fwhm_w_focused_wave)
-    #
-    # # Transform vertical fwhm to mm:
-    # sim_fwhm_h_plane_wave *= 1e3
-    # sim_fwhm_h_focused_wave *= 1e3
-    # std_exp_fwhm_h_plane_wave *= 1e3
-    # mean_exp_fwhm_h_plane_wave *= 1e3
-    # std_exp_fwhm_h_focused_wave *= 1e3
-    # mean_exp_fwhm_h_focused_wave *= 1e3
-    #
-    # # Normalize amplitude based on common references:
-    # sim_amplitude_focused_wave = sim_amplitude_focused_wave / sim_amplitude_maximum * 100
-    # sim_amplitude_plane_wave = sim_amplitude_plane_wave / sim_amplitude_maximum * 100
-    # mean_exp_amplitude_focused_wave = mean_exp_amplitude_focused_wave / exp_amplitude_maximum * 100
-    # std_exp_amplitude_focused_wave = std_exp_amplitude_focused_wave / exp_amplitude_maximum * 100
-    # mean_exp_amplitude_plane_wave = mean_exp_amplitude_plane_wave / exp_amplitude_maximum * 100
-    # std_exp_amplitude_plane_wave = std_exp_amplitude_plane_wave / exp_amplitude_maximum * 100
-    #
-    # theta_scatterer = np.radians(np.arange(0, 40 + 1, 1))
-    #
-    # # %%
-    # thetas_deg = np.degrees(theta_scatterer)
-    #
-    # fig, ax = plt.subplots(figsize=FIGSIZE)
-    #
-    # # Horizontal Onda Plana:
-    # ax.plot(np.degrees(theta_scatterer), sim_fwhm_w_plane_wave, '-', color='#ff1f23', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_fwhm_w_plane_wave, std_exp_fwhm_w_plane_wave, style='x-',
-    #                        color='#FF1F5B')
-    #
-    # # Horizontal Onda Focada:
-    # ax.plot(np.degrees(theta_scatterer), sim_fwhm_w_focused_wave, '-', color='k', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_fwhm_w_focused_wave, std_exp_fwhm_w_focused_wave, style='o-',
-    #                        color='k')
-    #
-    # ax.set_xticks(np.arange(0, 40 + 5, 5))
-    #
-    # ax.set_xlabel("Reflector angular position / (degrees)")
-    # ax.set_ylabel(r"Width / (degrees)")
-    #
-    # ax.grid()
-    # plt.tight_layout()
-    # plt.savefig(project_root / "figures" / "api_fwhm_horizontal.pdf")
-    # plt.show()
-    #
-    # # %%%
-    #
-    # fig, ax = plt.subplots(figsize=FIGSIZE)
-    # # Vertical Onda Plana:
-    # ax.plot(thetas_deg, sim_fwhm_h_plane_wave, '-', color='#FF1F5B', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_fwhm_h_plane_wave, std_exp_fwhm_h_plane_wave, style='x-',
-    #                        color='#FF1F5B')
-    #
-    # # Vertical Onda Focada:
-    # ax.plot(thetas_deg, sim_fwhm_h_focused_wave, '-', color='k', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_fwhm_h_focused_wave, std_exp_fwhm_h_focused_wave, style='o-',
-    #                        color='k')
-    #
-    # ax.set_xticks(np.arange(0, 40 + 5, 5))
-    # ax.set_xlabel("Reflector angular position / (degrees)")
-    # ax.set_ylabel(r"Height / (mm)")
-    #
-    # ax.grid()
-    # plt.tight_layout()
-    #
-    # plt.savefig(project_root / "figures" / "api_fwhm_vertical.pdf")
-    # plt.show()
-    #
-    # # %%%
-    #
-    # fig, ax = plt.subplots(figsize=FIGSIZE)
-    #
-    # # Vertical Onda Plana:
-    # ax.plot(np.degrees(theta_scatterer), sim_amplitude_plane_wave, '-', color='#FF1F5B', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_amplitude_plane_wave, std_exp_amplitude_plane_wave, style='x-',
-    #                        color='#FF1F5B')
-    #
-    # # Vertical Onda Focada:
-    # ax.plot(np.degrees(theta_scatterer), sim_amplitude_focused_wave, '-', color='k', lw=2)
-    # plot_experimental_data(ax, thetas_deg, mean_exp_amplitude_focused_wave, std_exp_amplitude_focused_wave, style='o-',
-    #                        color='k')
-    #
-    # ax.set_yticks([0, 25, 50, 75, 100])
-    # ax.set_xticks(np.arange(0, 40 + 5, 5))
-    #
-    # ax.set_xlabel("Reflector angular position / (degrees)")
-    # ax.set_ylabel(r"Normalized Amplitude / (%)")
-    #
-    # ax.grid()
-    # plt.tight_layout()
-    # plt.savefig(project_root / "figures" / "api_fwhm_amplitude.pdf")
-    # plt.show()
