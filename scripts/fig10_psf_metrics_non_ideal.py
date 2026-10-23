@@ -14,9 +14,6 @@ rcParams.update({
 import matplotlib
 matplotlib.use("TkAgg")
 
-LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
-FIGSIZE = (LATEX_LINEWIDTH * .4 * 1.25, 2 * 1.25)
-
 from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 
@@ -33,22 +30,22 @@ from pipe_lens.simulator.ray_physics.ray_focus_lens import RayFocusThroughLens
 from pipe_lens.simulator.optimizers.newton_optimizer import NewtonOptimizer
 from pipe_lens.simulator.raytracer_scenario import RaytracerScenario
 from pipe_lens.simulator.simulator import Simulator
-from pipe_lens.simulator.utils import fmc2sscan_numba
+from pipe_lens.simulator.utils import simulate_single_scatterer
 from pipe_lens.types import Solid, Fluid
 from pipe_lens.delay_laws import planewave_delaylaw, focusedwave_delaylaw
 from framework.post_proc import envelope
 from pipe_lens.utils import fwhm, convert_time2radius
 
 # Constants:
-LATEX_LINEWIDTH = 6.3091141732 # LaTeX linewidth
-cm = 1 / 2.54
-FIGSIZE = (7 * cm, 6 * cm)
-CROPPED_SSCAN_FIGSIZE = (2, 2)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_PATH = PROJECT_ROOT / "data" / "experiment_2"
 FIGS_PATH = PROJECT_ROOT / "figures"
-COMPUTE_SIM_RESULTS = False
+COMPUTE_SIM_RESULTS = True
 COMPUTE_EXP_RESULTS = True
 SAVE_FIGS = True
+cm = 1 / 2.54
+FIGSIZE = (7 * cm, 6 * cm)
+FWHM_THRESHOLD_DB = -6
 
 def plot_sscan(sscan_db, tbeg, tend, touter = 53.5e-6, tinner = 61.5e-6, insp_type="exp"):
     cm = 1 / 2.54
@@ -73,45 +70,10 @@ def plot_sscan(sscan_db, tbeg, tend, touter = 53.5e-6, tinner = 61.5e-6, insp_ty
     plt.tight_layout()
     if SAVE_FIGS:
         filepath = project_root / "figures" / f"{insp_type}_sscan_{np.degrees(theta_scatterer[i]):.0f}deg_shifted.pdf"
-        print(filepath)
         plt.savefig(filepath, bbox_inches='tight')
-        plt.show(block=True)
+        plt.close()
     else:
         plt.show(block=True)
-
-def simulate_single_scatterer(xreflector, zreflector, simulation, raytracer, delay_law, radius_span, focus_angle):
-    theta_scatterer = np.arctan2(xreflector, zreflector)
-    fmc = simulation.simulate_scatterer(
-        xf=xreflector,
-        zf=zreflector
-    )
-    delay_law_in_shifts = np.round(delay_law * simulation.fs).astype(np.int32)
-
-    optimal_ray = raytracer.solve(
-        xf=xreflector,
-        zf=zreflector
-    )
-    distances = np.asarray([ray.compute_dist() for ray in optimal_ray])
-
-    # assuming linearity, we create an s-scan from the fmc based on the emission and reception delay-law
-    sscan = fmc2sscan_numba(
-        fmc=fmc,
-        shifts_e=delay_law_in_shifts,
-        shifts_r=delay_law_in_shifts
-    )[..., np.newaxis]
-
-    sscan_env = envelope(sscan, axis=0)[..., 0]
-
-    # print(f"S-scan relative max = {sscan_env.max() / ref_amplitude}")
-
-    window_corners = [
-        (70e-3, theta_scatterer - np.radians(14)),  # north-east
-        (45e-3, theta_scatterer + np.radians(14))  # south-west
-    ]
-    fwhm_w, fwhm_h, amplitude, mask, api = fwhm(sscan_env, radius_span, focus_angle, window_corners,
-                                                                drawSquare=False)
-
-    return fwhm_w, fwhm_h, amplitude, sscan, mask, api
 
 def generate_focal_law(delay_law_type, focus_radius, focus_angle, acoustic_lens, pipeline, transducer):
     if delay_law_type == "focused_wave":
@@ -138,6 +100,7 @@ def generate_focal_law(delay_law_type, focus_radius, focus_angle, acoustic_lens,
         raise ValueError("Invalid delay_law_type")
 
     return delay_law
+
 
 if __name__ == "__main__":
     #%% USER INPUT:
@@ -176,11 +139,11 @@ if __name__ == "__main__":
     focus_alpha_max= np.radians(45)
     focus_alpha_min = np.radians(-45)
     focus_radius = 50e-3 # not necessary if plane_wave is selected.
-
+    
     # Define reflector positions for the PSF evaluation:
     r_scatterer = 60e-3
-    # theta_scatterer = np.radians(np.arange(-40, 40 + 1, 1))
-    theta_scatterer = np.radians(np.arange(0, 40 + 1, 1))
+    theta_scatterer = np.radians(np.arange(-40, 40 + 1, 1))
+    # theta_scatterer = np.radians(np.arange(-5, 40 + 5, 5))
 
     # Configure simulation:
     loss_model = LossModel(transmission=True, transmission_diffraction=True, reception_diffraction=True, attenuation=True)
@@ -220,8 +183,6 @@ if __name__ == "__main__":
             outer_r=pipeline.outer_radius
         )
 
-        time_shift = 0
-
         x_scatterer, z_scatterer = r_scatterer * np.sin(theta_scatterer) + pipeline.xcenter, r_scatterer * np.cos(theta_scatterer) + pipeline.zcenter
 
         sim_amplitude = np.zeros(shape=(len(theta_scatterer)))
@@ -230,9 +191,18 @@ if __name__ == "__main__":
         sim_api = np.zeros(shape=(len(theta_scatterer)))
 
         for i in tqdm(range(len(theta_scatterer)), desc="Running simulations"):
-            sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], sscan, mask, sim_api[i] = simulate_single_scatterer(
-                x_scatterer[i], z_scatterer[i], simulation, raytracer, delay_law, radius_span, focus_angle)
+            sscan = simulate_single_scatterer(x_scatterer[i], z_scatterer[i], simulation, delay_law)
             sscan_env = envelope(sscan, axis=0)[..., 0]
+
+            window_corners = [
+                (70e-3, theta_scatterer[i] - np.radians(14)),  # north-east
+                (45e-3, theta_scatterer[i] + np.radians(14))  # south-west
+            ]
+
+            sim_fwhm_w[i], sim_fwhm_h[i], sim_amplitude[i], mask, sim_api[i] = fwhm(sscan_env, radius_span, focus_angle,
+                                                                                   window_corners,
+                                                                                   drawSquare=False,
+                                                                                   thresh=FWHM_THRESHOLD_DB)
 
             if i == 0:
                 ref_amplitude = sscan_env.max()
@@ -246,7 +216,7 @@ if __name__ == "__main__":
     if COMPUTE_EXP_RESULTS:
         from framework import file_m2k
 
-        n_reps = 2
+        n_reps = 3
         n_pos = len(theta_scatterer)
 
         exp_amplitude = np.zeros(shape=(n_reps, n_pos))
@@ -254,30 +224,33 @@ if __name__ == "__main__":
         exp_fwhm_h = np.zeros(shape=(n_reps, n_pos))
         exp_api = np.zeros(shape=(n_reps, n_pos))
 
-        data_path = project_root / "data"
-        data_ref = file_m2k.read(str(data_path / f"multisalvo_xl_deslocado_-5mm_ref.m2k"), freq_transd=central_freq,
-                      bw_transd=bw, tp_transd=pulse_type)
-        ref_channels = np.mean(data_ref[1].ascan_data, axis=3)
+        data_ref = file_m2k.read(str(DATA_PATH / "ref.m2k"), freq_transd=central_freq, bw_transd=bw, tp_transd=pulse_type)[1]
+
         for i in tqdm(range(len(theta_scatterer)), desc="Processing experimental acquisitions"):
-
+            CNRs = np.zeros(n_reps, dtype=np.float64)
             for rep in range(n_reps):
-                lado = "esquerda" if theta_scatterer[i] < 0 else "direita"
-                shot = abs(int(np.degrees(theta_scatterer[i])))
-                data_insp = file_m2k.read(str(data_path / f"multisalvo_xl_deslocado_-5mm_{lado}_v{rep + 1}.m2k"), freq_transd=central_freq,
-                                          bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)[1]
-                sscan = np.sum(data_insp.ascan_data[..., 0] - ref_channels, axis=2)
-                sscan_env = envelope(sscan, axis=0)
-                time_grid = data_insp.time_grid[..., 0] * 1e-6
-                time_shift = 1.1e-6
+                if theta_scatterer[i] < 0:
+                    filename = f"part1_psf_v{rep + 1}.m2k"
+                else:
+                    filename = f"part2_psf_v{rep + 1}.m2k"
 
-                # plt.figure()
-                # plt.imshow(sscan_env, extent=(focus_angle[0], focus_angle[-1], time_grid[-1] * 1e6, time_grid[0] * 1e6), aspect='auto')
-                # plt.show(block=True)
+                shot = abs(int(np.degrees(theta_scatterer[i])))
+                data_insp = file_m2k.read(str(DATA_PATH / filename), freq_transd=central_freq, bw_transd=bw, tp_transd=pulse_type, sel_shots=shot)[1]
+
+                # Remove reference from inspection:
+                channels = data_insp.ascan_data[..., 0] - np.mean(data_ref.ascan_data, axis=-1)
+                sscan = np.sum(channels, axis=2)
+
+                sscan_env = envelope(sscan, axis=0)
+                sscan_db = np.log10(sscan_env / sscan_env.max() + 1E-6)
+                time_grid = data_insp.time_grid[..., 0] * 1e-6
+
+
 
                 radius_span = convert_time2radius(
                     tspan=time_grid,
-                    t_outer=53.2e-6,
-                    t_inner=60.05e-6,
+                    t_outer=53.04e-6,
+                    t_inner=58.86e-6,
                     cl_surf=pipeline.material.cp,
                     cl_upper=acoustic_lens.coupling_medium.cp,
                     cl_bottom=acoustic_lens.coupling_medium.cp,
@@ -285,50 +258,56 @@ if __name__ == "__main__":
                 )
 
                 window_corners = [
-                    (68e-3, theta_scatterer[i] - np.radians(5)),  # north-east
-                    (55e-3, theta_scatterer[i] + np.radians(12))  # south-west
+                    (64.0e-3, theta_scatterer[i] - np.radians(8)),  # north-east
+                    (56.0e-3, theta_scatterer[i] + np.radians(12))  # south-west
                 ]
 
-                exp_fwhm_w[rep, i], exp_fwhm_h[rep, i], exp_amplitude[rep, i], mask, exp_api[rep, i] = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False)
+                exp_fwhm_w[rep, i], exp_fwhm_h[rep, i], exp_amplitude[rep, i], mask, exp_api[rep, i] = fwhm(sscan_env, radius_span, focus_angle, window_corners, drawSquare=False, thresh=-6)
 
                 if i == 0:
                     ref_amplitude = sscan_env.max()
-
-                sscan_db = np.log10(sscan_env / sscan_env.max() + 1E-6)
-
-                if theta_scatterer[i] == np.degrees(0) and rep == 0:
-
-                    row_beg, row_end = np.searchsorted(radius_span[::-1], 56e-3), np.searchsorted(radius_span[::-1], 64e-3)
-                    col_beg, col_end = np.searchsorted(focus_angle, np.radians(-35)), np.searchsorted(focus_angle, np.radians(-15))
-                    row_beg = len(radius_span) - row_beg
-                    row_end = len(radius_span) - row_end
-
-                    sscan_signal = np.copy(sscan_env)
-                    sscan_signal[~mask] = np.nan
-
-                    noise_mask = np.zeros_like(sscan_env, dtype=bool)
-                    noise_mask[row_end:row_beg, col_beg:col_end] = True
-
-                    signal_mean = np.nanmean(sscan_signal)
-                    noise_mean = np.nanmean(sscan_env[noise_mask])
-                    noise_std = np.nanstd(sscan_env[noise_mask])
-
-                    noise_signal = np.copy(sscan_env)
-                    noise_signal[~noise_mask] = np.nan
-
-                    fig, axs = plt.subplots(nrows=1, ncols=3)
-                    axs[0].imshow(sscan_env, aspect='auto', interpolation='none')
-                    axs[1].imshow(sscan_signal, aspect='auto', interpolation='none')
-                    axs[2].imshow(noise_signal, aspect='auto', interpolation='none')
-                    plt.show(block=True)
-
-                    print(f"CNR = {20 * np.log10(np.abs(signal_mean - noise_mean) / noise_std):.2f} dB")
-
 
                 if theta_scatterer[i] == np.degrees(0):
                     touter = 51.98e-6
                     tinner = 60.20e-6
                     plot_sscan(sscan_db, tbeg=time_grid[0], tend=time_grid[-1], touter = touter, tinner = tinner, insp_type="exp")
+
+                row_beg, row_end = np.searchsorted(radius_span[::-1], 57e-3), np.searchsorted(radius_span[::-1], 62e-3)
+                col_beg, col_end = np.searchsorted(focus_angle, np.radians(-35)), np.searchsorted(focus_angle, np.radians(-15))
+                row_beg = len(radius_span) - row_beg
+                row_end = len(radius_span) - row_end
+
+                sscan_signal = np.copy(sscan_env)
+                sscan_signal[~mask] = np.nan
+
+                noise_mask = np.zeros_like(sscan_env, dtype=bool)
+                noise_mask[row_end:row_beg, col_beg:col_end] = True
+
+                signal_mean = np.nanmean(sscan_signal)
+                noise_mean = np.nanmean(sscan_env[noise_mask])
+                noise_std = np.nanstd(sscan_env[noise_mask])
+
+                noise_signal = np.copy(sscan_env)
+                noise_signal[~noise_mask] = np.nan
+
+                if not SAVE_FIGS:
+                    extent = (np.degrees(focus_angle[0]), np.degrees(focus_angle[-1]), time_grid[-1] * 1e6,
+                              time_grid[0] * 1e6)
+
+                    fig, axs = plt.subplots(nrows=1, ncols=3)
+                    manager = plt.get_current_fig_manager()
+                    manager.full_screen_toggle()
+
+                    axs[0].imshow(sscan_db, extent=extent, aspect='auto', interpolation='none')
+                    axs[1].imshow(mask, extent=extent, aspect='auto', interpolation='none')
+                    axs[1].axvline(np.degrees(theta_scatterer[i]), ls='--', lw=.5, color='r')
+
+                    axs[2].imshow(noise_signal, extent=extent, aspect='auto', interpolation='none')
+                    plt.show(block=True)
+                CNRs[rep] = 20 * np.log10(np.abs(signal_mean - noise_mean) / noise_std)
+            print(f"CNR mean = {np.mean(CNRs)} dB")
+            print(f"CNR std = {np.std(CNRs)} dB")
+
 
 
 

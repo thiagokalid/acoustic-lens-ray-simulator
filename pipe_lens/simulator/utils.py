@@ -8,7 +8,7 @@ import numpy as np
 
 from numpy import ndarray
 
-__all__ = ['dist', 'fmc_sim_kernel_gaussian', 'numba_gausspulse', 'fmc2sscan', 'fmc2sscan_numba']
+__all__ = ['dist', 'fmc_sim_kernel_gaussian', 'numba_gausspulse', 'fmc2sscan', 'fmc2sscan_numba', 'simulate_single_scatterer']
 
 FLOAT = np.float32
 
@@ -228,3 +228,20 @@ def line2circle_projection(xline, zline, slope_line, r):
     p2 = p2 if np.linalg.norm(p2) > 0 else None
 
     return p1, p2
+
+
+def simulate_single_scatterer(xreflector, zreflector, simulation, delay_law):
+    fmc = simulation.simulate_scatterer(
+        xf=xreflector,
+        zf=zreflector
+    )
+    delay_law_in_shifts = np.round(delay_law * simulation.fs).astype(np.int32)
+
+    # assuming linearity, we create an s-scan from the fmc based on the emission and reception delay-law
+    sscan = fmc2sscan_numba(
+        fmc=fmc,
+        shifts_e=delay_law_in_shifts,
+        shifts_r=delay_law_in_shifts
+    )[..., np.newaxis]
+
+    return sscan
